@@ -7,6 +7,7 @@ import torch
 from src.registry import ENV_CLASSES, MODEL_CLASSES
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
+_loggers = {}
 
 def parse_config(config_path = CONFIG_PATH):
     with open(config_path, 'rb') as f:
@@ -26,7 +27,7 @@ def parse_config(config_path = CONFIG_PATH):
 
     return config
 
-_loggers = {}
+
 
 def get_logger(name: str, config):
     """
@@ -59,6 +60,8 @@ def get_logger(name: str, config):
     _loggers[name] = logger
     return logger
 
+
+
 def load_env_and_model(config, device=None, logger=None):
     env_name = config['env']['env_type']
     model_name = config['env']['model']
@@ -81,7 +84,12 @@ def load_env_and_model(config, device=None, logger=None):
         model = model.to(device)
 
     # Load model checkpoint if exists
-    model_path = config['path']['model_dir'] / f"{env_name}_{model_name}_{m}x{n}.pt"
+    if model_name != 'cnn':
+        model_path = config['path']['model_dir'] / f"{env_name}_{model_name}_{m}x{n}.pt"
+    else:
+        # there is only one single cnn model to handle all grid size using transfer learning.
+        model_path = config['path']['model_dir'] / f"{env_name}_{model_name}.pt"
+
     if model_path.exists():
         model.load_state_dict(torch.load(model_path, map_location=device))
         if logger:

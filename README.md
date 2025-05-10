@@ -197,7 +197,7 @@ RLMath/
 │   └── run_<timestamp>/      # Contains log files per training run
 
 ├── models/                   # Saved model checkpoints
-│   └── <env>_<encoding>_<grid>.pt  # e.g., NoStrictIsoscelesEnv_cnn_5x10.pt
+│   └── <env>_<model>_<grid>.pt  # e.g., NoStrictIsoscelesEnv_ffnn_5x10.pt
 
 ├── src/                      # Source code package
 │   ├── __init__.py           # Set up file for the code package    
@@ -209,5 +209,5 @@ RLMath/
 │       ├── env_registry.py   # Maps env names to classes
 │       └── model_registry.py # Maps encoding to model classes
 
-└── testa/                    # Saved notedbooks and .py files for testing the environment 
+└── tests/                    # Saved notedbooks and .py files for testing the environment 
 ```

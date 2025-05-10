@@ -2,7 +2,7 @@
 [env]
 m = 4                              # this is the number of rows of the grid
 n = 4                              # this is the number of columns of the grid
-model = "ffnn"                     # the available models are in src/registry/model_registry.py
+model = "cnn"                     # the available models are in src/registry/model_registry.py
 env_type = "NoStrictIsoscelesEnv"  # the available envs are in src/registry/env_registry.py
 
 # parameters for training

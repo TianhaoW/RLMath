@@ -17,16 +17,38 @@ class FFQNet(nn.Module):
         x = x.view(x.size(0), -1)
         return self.model(x)
 
+###################################################################################################
+
+# This is a residual block used in the following ConvQNet
+class ResidualBlock(nn.Module):
+    def __init__(self, channels, dilation=1):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=dilation, dilation=dilation),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels),
+        )
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        out = self.block(x)
+        return self.relu(out + x)  # residual connection
+
 class ConvQNet(nn.Module):
     def __init__(self, grid_shape, output_dim):
         super().__init__()
         m, n = grid_shape
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.Conv2d(1, 64, 3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU()
+            ResidualBlock(64),
+            ResidualBlock(64, dilation=2),
+            ResidualBlock(64, dilation=4),
+            ResidualBlock(64),
         )
+
         self.q_head = nn.Conv2d(64, 1, kernel_size=1)
 
     def forward(self, x):

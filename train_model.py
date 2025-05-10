@@ -112,7 +112,12 @@ if train_cfg.get("save_best_points", True):
     env.points = best_points
     env.plot()
 
-model_file = path_cfg['model_dir'] / f"{env_name}_{model_name}_{m}x{n}.pt"
+if model_name != 'cnn':
+    model_file = path_cfg['model_dir'] / f"{env_name}_{model_name}_{m}x{n}.pt"
+else:
+    # the cnn is for supporting the transfer learning, so there is a single file for this model with any m,n
+    model_file = path_cfg['model_dir'] / f"{env_name}_{model_name}.pt"
+
 response = input(f"Save model to {model_file}? [y/N]: ").lower()
 if response == "y":
     torch.save(policy_net.state_dict(), model_file)
