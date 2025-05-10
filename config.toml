@@ -1,0 +1,24 @@
+# parameters for the enviroment and model
+[env]
+m = 4                              # this is the number of rows of the grid
+n = 4                              # this is the number of columns of the grid
+model = "ffnn"                     # the available models are in src/registry/model_registry.py
+env_type = "NoStrictIsoscelesEnv"  # the available envs are in src/registry/env_registry.py
+
+# parameters for training
+[train]
+episodes = 5000                    # the number of training epsisodes
+batch_size = 64
+gamma = 1.0                        # Gamma is the discount factor for reward. We set it to 1 for no discount.
+epsilon = 0.05                     # epsilon is the probability for exploring
+lr = 0.0001                        # This is the learning rate
+target_update_freq = 10
+memory_size = 10000
+save_best_points = true  # save and print best point set at the end
+
+
+# all the path are relative to the project root
+[path]
+project_root = './'
+log_dir = './logs/'
+model_dir = './models/'
