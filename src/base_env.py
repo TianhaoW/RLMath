@@ -86,10 +86,10 @@ class GridSubsetEnv(gym.Env):
         if self.badpoint:
             ax.plot(self.badpoint.x, self.badpoint.y, 'o', color='red', markersize=12)
 
-        ax.set_xlim(-0.5, n)
-        ax.set_ylim(-0.5, m)
-        ax.set_xticks(range(n))
-        ax.set_yticks(range(m))
+        ax.set_xlim(-0.5, n+0.5)
+        ax.set_ylim(-0.5, m+0.5)
+        ax.set_xticks(range(n+1))
+        ax.set_yticks(range(m+1))
         ax.set_aspect('equal')
         plt.grid(False)
         plt.show()
