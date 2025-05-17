@@ -1,16 +1,21 @@
 # parameters for the enviroment and model
 [env]
-m = 4                              # this is the number of rows of the grid
-n = 4                              # this is the number of columns of the grid
-model = "cnn"                     # the available models are in src/registry/model_registry.py
+m = 3                              # this is the number of rows of the grid
+n = 10                              # this is the number of columns of the grid
+model = "vit"                     # the available models are in src/registry/model_registry.py
 env_type = "NoStrictIsoscelesEnv"  # the available envs are in src/registry/env_registry.py
+
+# vit old shape, used for transfer learning
+[vit]
+m = 3
+n = 10
 
 # parameters for training
 [train]
 episodes = 5000                    # the number of training epsisodes
 batch_size = 64
 gamma = 1.0                        # Gamma is the discount factor for reward. We set it to 1 for no discount.
-epsilon = 0.05                     # epsilon is the probability for exploring
+epsilon = 0.1                     # epsilon is the probability for exploring
 lr = 0.0001                        # This is the learning rate
 target_update_freq = 10
 memory_size = 10000

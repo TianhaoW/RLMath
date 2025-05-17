@@ -101,7 +101,6 @@ for episode in range(episodes):
 
     if episode % 100 == 0:
         logger.info(f"Episode {episode} | Reward: {total_reward} | Best: {best_reward}")
-        logger.info(f"Episode ended with reward: {total_reward}, len(points): {len(env.points)}")
 
 # ------------------------------
 # Summary & Save
@@ -112,7 +111,7 @@ if train_cfg.get("save_best_points", True):
     env.points = best_points
     env.plot()
 
-if model_name != 'cnn':
+if model_name not in ['cnn', 'vit']:
     model_file = path_cfg['model_dir'] / f"{env_name}_{model_name}_{m}x{n}.pt"
 else:
     # the cnn is for supporting the transfer learning, so there is a single file for this model with any m,n
