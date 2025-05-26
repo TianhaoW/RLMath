@@ -1,3 +1,7 @@
 .idea/
 .ipynb_checkpoints/
 logs/
+/Gemfile
+/_site/
+/Gemfile.lock
+/archive/

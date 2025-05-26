@@ -31,7 +31,7 @@
 
 ### 🧠 Implementing and Registering New Models
 
-1. **Implement your model class** in [`src/models.py`](src/models.py). Your model should:
+1. **Implement your model class** in [`src/models.py`](src/models/models.py). Your model should:
 
    - Inherit from `nn.Module`.
    - Accept `(grid_shape, output_dim)` in the constructor.
@@ -40,7 +40,7 @@
 2. **Register your model** in [`src/registry/model_registry.py`](src/registry/model_registry.py):
 
    ```python
-   from src.models import MyNewModel
+   from src.models.models import MyNewModel
 
    MODEL_CLASSES = {
        "cnn": lambda grid_shape, output_dim: ConvQNet(grid_shape, output_dim),
@@ -196,15 +196,17 @@ RLMath/
 ├── logs/                     # Auto-generated logs per run (e.g., logs/run_2025-05-09_12-00/)
 │   └── run_<timestamp>/      # Contains log files per training run
 
-├── models/                   # Saved model checkpoints
+├── saved_models/                   # Saved model checkpoints
 │   └── <env>_<model>_<grid>.pt  # e.g., NoStrictIsoscelesEnv_ffnn_5x10.pt
 
 ├── src/                      # Source code package
 │   ├── __init__.py           # Set up file for the code package    
-│   ├── base_env.py           # Gym-style abstract GridSubsetEnv base class
-│   ├── isosceles_triangle.py # Implements NoIsoscelesEnv, NoStrictIsoscelesEnv class
-│   ├── models.py             # E.g FFQNet (flat) and ConvQNet (cnn) model definitions
 │   ├── utils.py              # Config parser, logging setup, helpers
+│   ├── env/  
+│       ├── base_env.py           # Gym-style abstract GridSubsetEnv base class
+│       ├── isosceles_triangle.py # Implements NoIsoscelesEnv, NoStrictIsoscelesEnv class
+│   ├── models/  
+│       ├── models.py             # E.g FFQNet (flat) and ConvQNet (cnn) model definitions
 │   └── registry/             # Registry pattern for envs and models
 │       ├── env_registry.py   # Maps env names to classes
 │       └── model_registry.py # Maps encoding to model classes

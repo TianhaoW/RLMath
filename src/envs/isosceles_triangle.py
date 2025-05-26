@@ -1,4 +1,4 @@
-from src.base_env import GridSubsetEnv, Point
+from src.envs.base_env import GridSubsetEnv, Point
 from collections import defaultdict
 
 def distance(p1: Point, p2: Point):

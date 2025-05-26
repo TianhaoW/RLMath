@@ -2,13 +2,17 @@
 [env]
 m = 3                              # this is the number of rows of the grid
 n = 10                              # this is the number of columns of the grid
-model = "vit"                     # the available models are in src/registry/model_registry.py
+model = "ffnn"                     # the available models are in src/registry/model_registry.py
 env_type = "NoStrictIsoscelesEnv"  # the available envs are in src/registry/env_registry.py
 
-# vit old shape, used for transfer learning
+# thich RL method to use
+[algo]
+method = 'dqn'
+
+# vit old shape, used for transfer learning.
 [vit]
-m = 3
-n = 10
+m = 4
+n = 11
 
 # parameters for training
 [train]
@@ -26,4 +30,4 @@ save_best_points = true  # save and print best point set at the end
 [path]
 project_root = './'
 log_dir = './logs/'
-model_dir = './models/'
+model_dir = './saved_models/'

@@ -1,4 +1,4 @@
-from src.models import FFQNet, ConvQNet, ViTQNet
+from src.models.dqn_models import FFQNet, ConvQNet, ViTQNet
 
 MODEL_CLASSES = {
     "ffnn": lambda grid_shape, output_dim: FFQNet(grid_shape, output_dim),
