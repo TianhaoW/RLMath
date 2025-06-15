@@ -1,6 +1,7 @@
-from src.envs.base_env import GridSubsetEnv, Point
+from src.envs.base_env import GridSubsetEnv, Point, GridSubsetEnvWithPriority
 from collections import defaultdict
 from math import gcd
+import numpy as np
 
 def reduced_slope(p1: Point, p2: Point):
     """
@@ -49,3 +50,42 @@ class NoThreeCollinearEnv(GridSubsetEnv):
         self.mark_selected(new_point)
         self.points.append(new_point)
         return False, 1
+
+class NoThreeCollinearEnvWithPriority(GridSubsetEnvWithPriority):
+    def __init__(self, m: int, n: int, priority_fn=None):
+        super().__init__(m, n, priority_fn)
+
+    def add_point(self, point: Point):
+        # If we cannot add this point, then the game ends
+        if self.priority_map[point.y, point.x] == -np.inf:
+            self.badpoint = point
+            return True, 0
+
+        # Else, we add the point, and update the state and priority
+        new_point = Point(int(point.x), int(point.y))
+        self.mark_selected(new_point)
+        self.points.append(new_point)
+        self._invalidate_collinear_points(new_point)
+
+        return False, 1
+
+    def _invalidate_collinear_points(self, new_point: Point):
+        m, n = self.grid_shape
+        for x in range(n):
+            for y in range(m):
+                test = Point(x, y)
+                if self.is_selected(test) or self.priority_map[y, x] == -np.inf:
+                    continue
+                # Invalidate if collinear with new_point and any selected point
+                for cap in self.points:
+                    if cap == new_point:
+                        continue
+                    if self._are_collinear(new_point, cap, test):
+                        self.priority_map[y, x] = -np.inf
+                        break
+
+    def _are_collinear(self, p1: Point, p2: Point, p3: Point) -> bool:
+        # Avoid exact slope check by using determinant
+        return (p1.x * (p2.y - p3.y) +
+                p2.x * (p3.y - p1.y) +
+                p3.x * (p1.y - p2.y)) == 0
