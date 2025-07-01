@@ -205,3 +205,8 @@ class ViTQNet(nn.Module):
         torch.save(self.state_dict(), path)
         if logger:
             logger.info(f"Saved ViTQNet to {path}")
+
+def get_best_device():
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")

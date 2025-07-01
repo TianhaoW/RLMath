@@ -6,8 +6,16 @@ import random
 from collections import deque
 from src.algos.base import RLAlgo
 
+# Apple MPS device support
+if torch.backends.mps.is_available():
+    default_device = torch.device("mps")
+else:
+    default_device = torch.device("cpu")
+
 class DQNTrainer(RLAlgo):
-    def __init__(self, config, env, model, device, logger):
+    def __init__(self, config, env, model, device=None, logger=None):
+        if device is None:
+            device = default_device
         super().__init__(config, env, model, device, logger)
         self.train_cfg = config["train"]
         self.env_cfg = config["env"]
