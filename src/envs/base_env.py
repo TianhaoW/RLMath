@@ -117,13 +117,15 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
         self.priority_map = np.zeros((m, n), dtype=np.float32)
         super().__init__(m, n)
 
+        # the super().init will call the reset() function. We initialize the priority_map in the reset() function.
+
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(2, m, n), dtype=np.float32
         )
 
     def reset(self, seed=None, options=None):
         _, info = super().reset(seed=seed, options=options)
-        self._init_priority()
+        self._init_priority_map()
 
         return self._get_obs(), info
 
@@ -166,9 +168,9 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
 
     def _get_obs(self):
         """Returns stacked observation: [state, priority_map]"""
-        return np.stack([self.state, self.priority_map], axis=0)
+        return np.stack([self.state, np.nan_to_num(self.priority_map, neginf=-1.0)], axis=0)
 
-    def _init_priority(self):
+    def _init_priority_map(self):
         m, n = self.grid_shape
         for x in range(n):
             for y in range(m):
