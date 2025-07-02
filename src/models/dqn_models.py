@@ -27,9 +27,9 @@ class FFQNet(nn.Module, RLModelMixin):
         m, n = grid_shape
         self.input_dim = m * n
         self.model = nn.Sequential(
-            nn.Linear(self.input_dim, 256),
+            nn.Linear(self.input_dim, 1024),
             nn.ReLU(),
-            nn.Linear(256, output_dim)
+            nn.Linear(1024, output_dim)
         )
 
     def forward(self, x):
@@ -73,7 +73,7 @@ class ConvQNet(nn.Module, RLModelMixin):
         super().__init__()
         m, n = grid_shape
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, 64, 51, padding=25),
+            nn.Conv2d(1, 64, 3, padding=1),
             nn.ReLU(),
             ResidualBlock(64, ker_size = 5),
             # ResidualBlock(64, ker_size=51),

@@ -1,6 +1,6 @@
 import torch
 from src.registry import ALGO_CLASSES
-from src.utils import load_env_and_model, parse_config, get_logger
+from src.config_utils import load_env_and_model, parse_config, get_logger
 
 config = parse_config()
 logger = get_logger("train", config)
@@ -21,7 +21,13 @@ else:
 logger.info(f"Using device: {device}")
 
 env, model = load_env_and_model(config, device=device, logger=logger)
+
+# Get trainer class (handle both class and function entries)
 trainer_class = ALGO_CLASSES[algo_name]
+if callable(trainer_class) and not isinstance(trainer_class, type):
+    # This is a function that returns a class (lazy loading)
+    trainer_class = trainer_class()
+
 trainer = trainer_class(config, env, model, device, logger)
 
 if __name__ == "__main__":

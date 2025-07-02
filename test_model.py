@@ -1,6 +1,6 @@
 import torch
 from src.registry import ALGO_CLASSES
-from src.utils import load_env_and_model, parse_config, get_logger
+from src.config_utils import load_env_and_model, parse_config, get_logger
 
 config = parse_config()
 logger = get_logger("train", config)

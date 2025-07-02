@@ -1,29 +1,32 @@
 # parameters for the enviroment and model
 [env]
-m = 3                              # this is the number of rows of the grid
-n = 10                              # this is the number of columns of the grid
-model = "ffnn"                     # the available models are in src/registry/model_registry.py
-env_type = "NoStrictIsoscelesEnv"  # the available envs are in src/registry/env_registry.py
+m = 5                              # this is the number of rows of the grid
+n = 5                              # this is the number of columns of the grid
+model = "vit"                     # the available models are in src/registry/model_registry.py
+env_type = "NoThreeCollinearEnvWithPriority"  # the available envs are in src/registry/env_registry.py
+priority_function = "default"     # priority function: "default", "boundary", "distance", "collinear_count"
 
-# thich RL method to use
+# which RL method to use
 [algo]
-method = 'dqn'
-
-# vit old shape, used for transfer learning.
-[vit]
-m = 4
-n = 11
+method = 'mcts'                    # 'dqn', 'mcts', 'priority', 'mcts_priority'
 
 # parameters for training
 [train]
-episodes = 5000                    # the number of training epsisodes
-batch_size = 64
+episodes = 100                     # the number of training epsisodes (or games for MCTS)
+batch_size = 64                    # for DQN
 gamma = 1.0                        # Gamma is the discount factor for reward. We set it to 1 for no discount.
-epsilon = 0.1                     # epsilon is the probability for exploring
-lr = 0.0001                        # This is the learning rate
-target_update_freq = 10
-memory_size = 10000
-save_best_points = true  # save and print best point set at the end
+epsilon = 0.1                      # epsilon is the probability for exploring (DQN)
+lr = 0.0001                        # This is the learning rate (DQN)
+target_update_freq = 10            # for DQN
+memory_size = 10000                # for DQN
+save_best_points = true            # save and print best point set at the end
+
+# MCTS specific parameters
+mcts_searches = 1000               # number of MCTS search iterations per move
+mcts_c_param = 1.4                 # UCB exploration parameter
+mcts_use_priority = true           # whether to use priority for action selection
+mcts_top_n = 1                     # number of top priority levels to consider
+mcts_progress = true               # show progress during training
 
 
 # all the path are relative to the project root
