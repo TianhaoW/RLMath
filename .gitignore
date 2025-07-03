@@ -5,3 +5,7 @@ logs/
 /_site/
 /Gemfile.lock
 /archive/
+
+
+*.png
+*.txt
