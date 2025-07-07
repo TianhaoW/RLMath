@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from itertools import combinations
 import matplotlib.pyplot as plt
 from tqdm.notebook import trange
+import os
 
 # =============================================================================
 # Neural Network Architecture
@@ -430,6 +431,10 @@ class AlphaZero:
                 self.train(memory)
             
             if (iteration + 1) % self.args['save_interval'] == 0:
+                # Ensure the save directory exists
+                save_dir = os.path.dirname(self.args['weight_file_name'])
+                if save_dir:
+                    os.makedirs(save_dir, exist_ok=True)
                 torch.save(self.model.state_dict(), f"{self.args['weight_file_name']}_model_{iteration}.pt")
                 torch.save(self.optimizer.state_dict(), f"{self.args['weight_file_name']}_optimizer_{iteration}.pt")
 
@@ -439,6 +444,8 @@ class AlphaZero:
 
 def create_alphazero_config(grid_size: int, **kwargs) -> Dict[str, Any]:
     """Create default AlphaZero configuration."""
+    # Ensure the save directory exists
+    os.makedirs('saved_models', exist_ok=True)
     config = {
         'C': 2,
         'num_searches': grid_size * grid_size * 10,
@@ -451,7 +458,7 @@ def create_alphazero_config(grid_size: int, **kwargs) -> Dict[str, Any]:
         'dirichlet_epsilon': 0.25,
         'dirichlet_alpha': 0.3,
         'value_function': lambda x: x ** 2,
-        'weight_file_name': f"n3il_alphazero_{grid_size}x{grid_size}"
+        'weight_file_name': f"saved_models/n3il_alphazero_{grid_size}x{grid_size}"
     }
     config.update(kwargs)
     return config
