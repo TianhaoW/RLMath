@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import Iterable, Optional
 
-from .geometry import Point
+from src.envs.base_env import Point
 
 
 def plot_no_three_in_line(points: Iterable[Point], n: Optional[int] = None, title: str = "No-3-in-line Set") -> None:

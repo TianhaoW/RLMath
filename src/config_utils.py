@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 
 from src.registry import ENV_CLASSES, MODEL_CLASSES
-from src.priority_functions import create_priority_function
+# Priority functions moved to base_env
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.toml"
 _loggers = {}
@@ -76,7 +76,8 @@ def load_env_and_model(config, device=None, logger=None):
     # Check if this is a priority-based environment
     if "WithPriority" in env_name:
         priority_type = config['env'].get('priority_function', 'default')
-        priority_fn = create_priority_function(priority_type)
+        # Use default priority function from base_env
+        priority_fn = None  # Will use default_priority from base_env
         env = ENV_CLASSES[env_name](m, n, priority_fn)
         if logger:
             logger.info(f"Created priority environment with {priority_type} priority function")

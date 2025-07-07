@@ -118,10 +118,7 @@ def get_mcts_alphazero():
 
 
 
-# Legacy MCTS trainer
-def get_mcts_trainer():
-    from src.algos.mcts_trainer import MCTSTrainer
-    return MCTSTrainer
+
 
 # Unified algorithm registry function
 def get_algo(algo_name):
@@ -142,5 +139,4 @@ ALGO_CLASSES = {
     "mcts_parallel": get_mcts_parallel,    # Advanced Parallel MCTS
     "mcts_advanced": get_mcts_advanced,    # AlphaZero-style MCTS
     "mcts_alphazero": get_mcts_alphazero, # AlphaZero MCTS with neural network
-    "mcts": get_mcts_trainer,              # Legacy trainer for backwards compatibility
 }
