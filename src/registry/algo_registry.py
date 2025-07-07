@@ -85,6 +85,39 @@ def get_mcts_advanced():
         return UnifiedMCTS(unified_env, config, variant='advanced')
     return create_mcts
 
+def get_mcts_alphazero():
+    from src.algos.alphazero_mcts import AlphaZeroMCTS, N3ilAlphaZero, ResNet, AlphaZero, create_alphazero_config
+    import torch
+    
+    def create_mcts(config, env=None, model=None, device=None, logger=None, m=None, n=None, priority_fn=None):
+        # Support creating with custom (m, n) like other MCTS variants
+        if m is not None and n is not None:
+            grid_size = (m, n)
+            if config is None:
+                config = create_alphazero_config(max(m, n))
+            else:
+                config = config.copy()
+        else:
+            grid_size = (config.get('n', 5), config.get('n', 5)) if config else (5, 5)
+            if config is None:
+                config = create_alphazero_config(max(grid_size))
+        
+        # Create game environment
+        game = N3ilAlphaZero(grid_size=grid_size, args=config)
+        
+        # Create neural network if not provided
+        if model is None:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = ResNet(game, 4, 64, device).to(device)
+        
+        # Create MCTS instance
+        mcts = AlphaZeroMCTS(game, config, model)
+        
+        return mcts
+    return create_mcts
+
+
+
 # Legacy MCTS trainer
 def get_mcts_trainer():
     from src.algos.mcts_trainer import MCTSTrainer
@@ -108,5 +141,6 @@ ALGO_CLASSES = {
     "mcts_priority": get_mcts_priority,    # Top-N Priority MCTS  
     "mcts_parallel": get_mcts_parallel,    # Advanced Parallel MCTS
     "mcts_advanced": get_mcts_advanced,    # AlphaZero-style MCTS
+    "mcts_alphazero": get_mcts_alphazero, # AlphaZero MCTS with neural network
     "mcts": get_mcts_trainer,              # Legacy trainer for backwards compatibility
 }

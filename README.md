@@ -2,7 +2,7 @@
 
 ### Using Google Colab
 - **Start from blank notebook**: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/TianhaoW/RLMath/blob/master/colab_blank.ipynb)
-- **Example sage**: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/TianhaoW/RLMath/blob/master/colab_example.ipynb)
+- **Example usage**: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/TianhaoW/RLMath/blob/master/colab_example.ipynb)
 
 
 ## Contribution Guide
