@@ -250,6 +250,173 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
         """Run AlphaZero MCTS and populate environment for plotting."""
         return self._run_alphazero_mcts(config, return_points=True)
 
+    def patternboost(self, config=None, plot=True, save_results=True, log_file=None):
+        """Run PatternBoost algorithm using this environment for local search."""
+        import os
+        import json
+        import pickle
+        from datetime import datetime
+        from src.algos.patternboost import PatternBoost
+        
+        # Setup logging
+        if log_file is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = f"./logs/patternboost_{self.grid_shape[0]}x{self.grid_shape[1]}_{timestamp}.log"
+        
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        
+        def log_message(message):
+            print(message)
+            with open(log_file, 'a') as f:
+                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
+        
+        log_message("=" * 60)
+        log_message("PATTERNBOOST EXECUTION STARTED")
+        log_message(f"Grid size: {self.grid_shape}")
+        log_message(f"Log file: {log_file}")
+        log_message("=" * 60)
+        
+        # Default PatternBoost configuration
+        default_config = {
+            'learning_rate': 3e-4,
+            'weight_decay': 0.1,
+            'betas': (0.9, 0.95),
+            'initial_dataset_size': 100,  # Smaller for environment method
+            'top_percentage': 0.25,
+            'generation_size': 50,        # Smaller for environment method
+            'max_iterations': 3,          # Smaller for environment method
+            'batch_size': 16,
+            'epochs_per_iteration': 3,    # Smaller for environment method
+            'local_search_method': 'greedy'  # Default local search method
+        }
+        
+        # Merge with user config if provided
+        if config:
+            default_config.update(config)
+        
+        log_message(f"PatternBoost Configuration:")
+        for key, value in default_config.items():
+            log_message(f"  {key}: {value}")
+        
+        # Create PatternBoost instance using this environment
+        log_message("Creating PatternBoost instance...")
+        patternboost = PatternBoost(
+            grid_size=self.grid_shape,
+            device='cpu',  # Use CPU for environment method
+            model_dir='./saved_models',
+            env=self,  # Pass this environment instance
+            **default_config
+        )
+        
+        # Run PatternBoost
+        log_message("Starting PatternBoost training...")
+        results = patternboost.run()
+        
+        # Generate best configuration
+        log_message("Generating best configuration...")
+        best_config, best_score = patternboost.generate_best_configuration()
+        
+        # Apply best configuration to this environment
+        self.reset()
+        for i in range(self.grid_shape[0]):
+            for j in range(self.grid_shape[1]):
+                if best_config[i, j] == 1:
+                    point = self.decode_action(i * self.grid_shape[1] + j)
+                    self.add_point(point)
+        
+        log_message(f"PatternBoost completed. Best score: {best_score}")
+        log_message(f"Number of points placed: {len(self.points)}")
+        log_message(f"Points coordinates: {self.points}")
+        
+        # Save results if requested
+        if save_results:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            grid_name = f"{self.grid_shape[0]}x{self.grid_shape[1]}"
+            
+            # Save points to file
+            points_file = f"./saved_models/patternboost_points_{grid_name}_{timestamp}.pkl"
+            with open(points_file, 'wb') as f:
+                pickle.dump({
+                    'points': self.points,
+                    'score': best_score,
+                    'grid_shape': self.grid_shape,
+                    'config': default_config,
+                    'results': results
+                }, f)
+            log_message(f"Points saved to: {points_file}")
+            
+            # Save configuration matrix
+            config_file = f"./saved_models/patternboost_config_{grid_name}_{timestamp}.npy"
+            np.save(config_file, best_config)
+            log_message(f"Configuration matrix saved to: {config_file}")
+            
+            # Save results summary
+            summary_file = f"./saved_models/patternboost_summary_{grid_name}_{timestamp}.json"
+            summary = {
+                'grid_shape': self.grid_shape,
+                'best_score': best_score,
+                'num_points': len(self.points),
+                'points': [(p.x, p.y) for p in self.points],
+                'config': default_config,
+                'results': {
+                    'iterations': results['iterations'],
+                    'best_scores': results['best_scores'],
+                    'dataset_sizes': results['dataset_sizes'],
+                    'training_losses': results['training_losses']
+                },
+                'timestamp': timestamp
+            }
+            with open(summary_file, 'w') as f:
+                json.dump(summary, f, indent=2)
+            log_message(f"Summary saved to: {summary_file}")
+        
+        # Plot and save graph
+        if plot or save_results:
+            import matplotlib.pyplot as plt
+            
+            # Create the plot
+            fig, ax = plt.subplots(figsize=(12, 12))
+            
+            # Draw grid lines
+            m, n = self.grid_shape
+            for x in range(n + 1):
+                ax.axvline(x, color='lightgray', linewidth=1)
+            for y in range(m + 1):
+                ax.axhline(y, color='lightgray', linewidth=1)
+            
+            # Plot points
+            for p in self.points:
+                ax.plot(p.x, p.y, 'o', color='blue', markersize=8)
+            
+            if self.badpoint:
+                ax.plot(self.badpoint.x, self.badpoint.y, 'o', color='red', markersize=8)
+            
+            ax.set_xlim(-0.5, n-0.5)
+            ax.set_ylim(-0.5, m-0.5)
+            ax.set_xticks(range(n))
+            ax.set_yticks(range(m))
+            ax.set_aspect('equal')
+            ax.grid(False)
+            ax.set_title(f'PatternBoost Result - {len(self.points)} points, Score: {best_score}')
+            
+            # Save the plot
+            if save_results:
+                plot_file = f"./saved_models/patternboost_plot_{grid_name}_{timestamp}.png"
+                plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+                log_message(f"Plot saved to: {plot_file}")
+            
+            # Show the plot only if requested
+            if plot:
+                plt.show()
+            else:
+                plt.close()  # Close without showing
+        
+        log_message("=" * 60)
+        log_message("PATTERNBOOST EXECUTION COMPLETED")
+        log_message("=" * 60)
+        
+        return best_score
+
     def _run_mcts(self, variant, config=None, return_points=False):
         """Internal method to run MCTS with the specified variant."""
         # Import here to avoid circular imports

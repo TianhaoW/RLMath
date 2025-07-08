@@ -28,6 +28,18 @@ mcts_use_priority = true           # whether to use priority for action selectio
 mcts_top_n = 1                     # number of top priority levels to consider
 mcts_progress = true               # show progress during training
 
+# PatternBoost specific parameters
+[patternboost]
+learning_rate = 3e-4               # learning rate for transformer
+weight_decay = 0.1                 # weight decay for transformer
+betas = [0.9, 0.95]               # beta parameters for AdamW
+initial_dataset_size = 1000        # number of initial configurations
+top_percentage = 0.25              # percentage of top configs for training
+generation_size = 100              # number of new configs to generate
+max_iterations = 5                 # maximum number of iterations
+batch_size = 32                    # batch size for training
+epochs_per_iteration = 5           # epochs per iteration
+
 
 # all the path are relative to the project root
 [path]

@@ -116,9 +116,37 @@ def get_mcts_alphazero():
         return mcts
     return create_mcts
 
-
-
-
+def get_patternboost():
+    from src.algos.patternboost import PatternBoost
+    
+    def create_patternboost(config, env=None, model=None, device=None, logger=None, m=None, n=None, priority_fn=None):
+        # Support creating with custom (m, n) like other algorithms
+        if m is not None and n is not None:
+            grid_size = (m, n)
+            if config is None:
+                config = {}
+            else:
+                config = config.copy()
+        else:
+            grid_size = (config.get('n', 5), config.get('n', 5)) if config else (5, 5)
+            if config is None:
+                config = {}
+        
+        # Set device
+        if device is None:
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # Create PatternBoost instance
+        patternboost = PatternBoost(
+            grid_size=grid_size,
+            device=device,
+            model_dir='./saved_models',
+            **config
+        )
+        
+        return patternboost
+    return create_patternboost
 
 # Unified algorithm registry function
 def get_algo(algo_name):
@@ -139,4 +167,5 @@ ALGO_CLASSES = {
     "mcts_parallel": get_mcts_parallel,    # Advanced Parallel MCTS
     "mcts_advanced": get_mcts_advanced,    # AlphaZero-style MCTS
     "mcts_alphazero": get_mcts_alphazero, # AlphaZero MCTS with neural network
+    "patternboost": get_patternboost,      # PatternBoost algorithm
 }
