@@ -250,7 +250,7 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
         """Run AlphaZero MCTS and populate environment for plotting."""
         return self._run_alphazero_mcts(config, return_points=True)
 
-    def patternboost(self, config=None, plot=True, save_results=True, log_file=None):
+    def patternboost(self, config=None, plot=True, save_results=True, log_file=None, device=None):
         """Run PatternBoost algorithm using this environment for local search."""
         import os
         import json
@@ -302,7 +302,7 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
         log_message("Creating PatternBoost instance...")
         patternboost = PatternBoost(
             grid_size=self.grid_shape,
-            device='cpu',  # Use CPU for environment method
+            device=device or "cpu",  # Use the provided device, default to CPU
             model_dir='./saved_models',
             env=self,  # Pass this environment instance
             **default_config

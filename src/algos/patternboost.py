@@ -335,6 +335,10 @@ class PatternBoost:
         
         start_iteration = resume_from if resume_from is not None else 0
         
+        # Track best-ever configuration and score
+        best_ever_score = -float('inf')
+        best_ever_config = None
+        
         for iteration in range(start_iteration, self.max_iterations):
             print(f"\n=== PatternBoost Iteration {iteration + 1}/{self.max_iterations} ===")
             
@@ -352,6 +356,12 @@ class PatternBoost:
             
             # Run local search on new seeds
             improved_configs = self._run_local_search(new_configs, method='greedy')
+            
+            # Track best-ever configuration and score
+            for config, score in improved_configs:
+                if score > best_ever_score:
+                    best_ever_score = score
+                    best_ever_config = config
             
             # Add improved configurations to dataset
             dataset.extend(improved_configs)
@@ -378,6 +388,11 @@ class PatternBoost:
         
         print("\n=== PatternBoost completed ===")
         print(f"Final best score: {results['best_scores'][-1]}")
+        print(f"Best-ever score: {best_ever_score}")
+        
+        # Save best-ever configuration and score for later use
+        self.best_ever_score = best_ever_score
+        self.best_ever_config = best_ever_config
         
         return results
     
@@ -385,14 +400,14 @@ class PatternBoost:
         """Generate the best configuration using the trained model"""
         print("Generating best configuration...")
         
-        # Generate multiple configurations
+        # If best-ever config is available, return it
+        if hasattr(self, 'best_ever_config') and self.best_ever_config is not None:
+            print(f"Returning best-ever configuration with score: {self.best_ever_score}")
+            return self.best_ever_config, self.best_ever_score
+        
+        # Otherwise, fallback to generating new configs
         configs = self._generate_new_seeds(100)
-        
-        # Run local search on all configurations
         improved_configs = self._run_local_search(configs, method='greedy')
-        
-        # Return the best one
         best_config, best_score = max(improved_configs, key=lambda x: x[1])
-        
         print(f"Best configuration found with score: {best_score}")
         return best_config, best_score 

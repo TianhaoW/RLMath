@@ -4,8 +4,8 @@ Test script for PatternBoost with environment methods
 """
 
 from src.envs import NoThreeCollinearEnvWithPriority
-
-
+import torch
+device = "cuda" if torch.cuda.is_available() else "cpu"
 def main():
     """Test PatternBoost with environment methods"""
     print("Testing PatternBoost with environment methods")
@@ -28,11 +28,11 @@ def main():
     
     # PatternBoost configuration
     patternboost_config = {
-        'initial_dataset_size': 1000,  # Small for testing
-        'generation_size': 200,       # Small for testing
-        'max_iterations': 10,         # Small for testing
-        'epochs_per_iteration': 10,   # Small for testing
-        'local_search_method': 'greedy'  # Use greedy for local search
+        'initial_dataset_size': 2000,  # Small for testing
+        'generation_size': 500,       # Small for testing
+        'max_iterations': 20,         # Small for testing
+        'epochs_per_iteration': 20,   # Small for testing
+        'local_search_method': 'mcts_advanced', # Use greedy for local search
     }
     
     # Run PatternBoost with logging and saving
@@ -40,7 +40,8 @@ def main():
         config=patternboost_config, 
         plot=True, 
         save_results=True,
-        log_file="./logs/patternboost_test.log"
+        log_file="./logs/patternboost_test.log",
+        device=device
     )
     
     print(f"✓ PatternBoost completed with best score: {best_score}")
