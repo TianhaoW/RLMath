@@ -22,10 +22,10 @@ def _extract_grid_shape_from_filename(filename: str):
     return m, n
 
 class FFQNet(nn.Module, RLModelMixin):
-    def __init__(self, grid_shape, output_dim):
+    def __init__(self, grid_shape, output_dim, channels=1):
         super().__init__()
         m, n = grid_shape
-        self.input_dim = m * n
+        self.input_dim = m * n * channels
         self.model = nn.Sequential(
             nn.Linear(self.input_dim, 1024),
             nn.ReLU(),
@@ -33,7 +33,7 @@ class FFQNet(nn.Module, RLModelMixin):
         )
 
     def forward(self, x):
-        # x: (B, m, n) → flatten to (B, m*n)
+        # x: (B, m, n) → flatten to (B, m*n) or x: (B, c, m, n) -> (B, c*m*n)
         x = x.view(x.size(0), -1)
         return self.model(x)
 
@@ -69,11 +69,11 @@ class ResidualBlock(nn.Module):
         return self.relu(out + x)  # residual connection
 
 class ConvQNet(nn.Module, RLModelMixin):
-    def __init__(self, grid_shape, output_dim):
+    def __init__(self, grid_shape, output_dim, channels=1):
         super().__init__()
         m, n = grid_shape
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, 64, 3, padding=1),
+            nn.Conv2d(channels, 64, 3, padding=1),
             nn.ReLU(),
             ResidualBlock(64, ker_size = 5),
             # ResidualBlock(64, ker_size=51),
@@ -82,8 +82,12 @@ class ConvQNet(nn.Module, RLModelMixin):
         self.q_head = nn.Conv2d(64, 1, kernel_size=1)
 
     def forward(self, x):
-        # x: (B, m, n) → (B, 1, m, n)
-        x = x.unsqueeze(1)
+        if x.dim() == 3:
+            # x: (B, m, n) → (B, 1, m, n)
+            x = x.unsqueeze(1)
+        else:
+            # In this case, x has shape (c, m, n)
+            pass
         x = self.encoder(x)
         q_map = self.q_head(x)  # (B, 1, m, n)
         return q_map.view(x.size(0), -1)  # → (B, m*n)
@@ -107,7 +111,7 @@ class ConvQNet(nn.Module, RLModelMixin):
 ###################################################################################################
 
 class ViTQNet(nn.Module):
-    def __init__(self, grid_shape, output_dim, embed_dim=64, num_heads=4, num_layers=4):
+    def __init__(self, grid_shape, output_dim, channels=1, embed_dim=64, num_heads=4, num_layers=4):
         """
         Args:
             grid_shape: (m, n)
@@ -123,7 +127,7 @@ class ViTQNet(nn.Module):
         self.embed_dim = embed_dim
 
         # CNN stem to embed local features
-        self.patch_embed = nn.Conv2d(1, embed_dim, kernel_size=3, padding=1)
+        self.patch_embed = nn.Conv2d(channels, embed_dim, kernel_size=3, padding=1)
 
         # Positional embeddings (learnable)
         self.pos_embed = nn.Parameter(torch.randn(1, m * n, embed_dim))
@@ -141,10 +145,18 @@ class ViTQNet(nn.Module):
         self.q_head = nn.Linear(embed_dim, 1)
 
     def forward(self, x):
-        B, m, n = x.shape
-        assert (m, n) == (self.m, self.n), "Input grid size must match init shape"
+        if x.dim() == 3:
+            B, m, n = x.shape
+            x = x.unsqueeze(1)  # (B, 1, m, n)
+        elif x.dim() == 4:
+            B, c, m, n = x.shape # In this case, x already has shape (B, c, m, n)
+            if c != self.patch_embed.in_channels:
+                raise ValueError(f"Expected {self.patch_embed.in_channels} channels, got {c}")
+        else:
+            raise ValueError(f"Unexpected input shape: {x.shape}")
 
-        x = x.unsqueeze(1)                          # (B, 1, m, n)
+        assert (m, n) == (self.m, self.n), f"Input grid size {(m, n)} does not match expected {(self.m, self.n)}"
+
         x = self.patch_embed(x)                     # (B, D, m, n)
         x = x.flatten(2).transpose(1, 2)            # (B, m*n, D)
         x = x + self.pos_embed                      # Add positional embeddings

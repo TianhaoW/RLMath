@@ -115,10 +115,10 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
         # initialize the priority map
         self.priority_fn = priority_fn or self.default_priority
         self.priority_map = np.zeros((m, n), dtype=np.float32)
+        self.obs = np.empty((2, m, n), dtype=np.float32)
         super().__init__(m, n)
 
         # the super().init will call the reset() function. We initialize the priority_map in the reset() function.
-
         self.observation_space = spaces.Box(
             low=0, high=1, shape=(2, m, n), dtype=np.float32
         )
@@ -147,17 +147,27 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
         :param plot: If True, this will draw a plot
         :return: the picked point. If no points are available, return -1
         '''
-        max_value = np.max(self.priority_map)
-        if max_value == -np.inf:
+        # Mask invalid points
+        valid_mask = (self.priority_map != -np.inf)
+        if not np.any(valid_mask):
             if plot:
                 self.plot()
             return -1
-        points = np.where(self.priority_map == max_value)
+
         if random:
-            index = np.random.randint(len(points[0]))
+            # Find max among valid points
+            masked_map = np.where(valid_mask, self.priority_map, -np.inf)
+            max_value = np.max(masked_map)
+            ys, xs = np.where(masked_map == max_value)
+            idx = np.random.randint(len(xs))
+            point = Point(int(xs[idx]), int(ys[idx]))
         else:
-            index = 0
-        point = Point(int(points[1][index]), int(points[0][index]))
+            # Deterministic: use argmax on flattened valid masked array
+            masked_flat = np.where(valid_mask, self.priority_map, -np.inf)
+            flat_index = np.argmax(masked_flat)
+            y, x = divmod(flat_index, self.priority_map.shape[1])
+            point = Point(int(x), int(y))
+
         self.self_play_add_point(point, plot)
         return point
 
@@ -168,7 +178,10 @@ class GridSubsetEnvWithPriority(GridSubsetEnv):
 
     def _get_obs(self):
         """Returns stacked observation: [state, priority_map]"""
-        return np.stack([self.state, np.nan_to_num(self.priority_map, neginf=-1.0)], axis=0)
+        self.obs[0][:] = self.state
+        np.copyto(self.obs[1], self.priority_map, where=(self.priority_map != -np.inf))
+        self.obs[1][self.priority_map == -np.inf] = -1.0
+        return self.obs
 
     def _init_priority_map(self):
         m, n = self.grid_shape

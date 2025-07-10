@@ -76,7 +76,12 @@ def load_env_and_model(config, device=None, logger=None):
     # Instantiate model
     if model_name not in MODEL_CLASSES:
         raise ValueError(f"Unknown model encoding: {model_name}")
-    model = MODEL_CLASSES[model_name](grid_shape, output_dim)
+
+    channels = 1
+    obs_shape = env.observation_space.shape
+    if len(obs_shape) == 3:
+        channels = obs_shape[0]
+    model = MODEL_CLASSES[model_name](grid_shape, output_dim, channels)
 
     # Move model to device
     if device is not None:

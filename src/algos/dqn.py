@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+import copy
 from collections import deque
 from src.algos.base import RLAlgo
 
@@ -12,7 +13,8 @@ class DQNTrainer(RLAlgo):
         self.train_cfg = config["train"]
         self.env_cfg = config["env"]
 
-        self.target_net = type(self.model)(env.grid_shape, env.grid_shape[0] * env.grid_shape[1]).to(device)
+        self.target_net = copy.deepcopy(self.model)
+        self.target_net.to(device)
         self.target_net.load_state_dict(self.model.state_dict())
         self.target_net.eval()
 
@@ -61,8 +63,14 @@ class DQNTrainer(RLAlgo):
         self.logger.info(f"Training complete. Best reward: {best_reward}")
         if self.train_cfg.get("save_best_points", True):
             self.logger.info(f"Best point set: {best_points}")
-            self.env.points = best_points
+
+            # TODO, change here to plot correctly. Reset, and add points
+            self.env.reset()
+            for point in best_points:
+                self.env.self_play_add_point(point, plot=False)
             self.env.plot()
+            # self.env.points = best_points
+            # self.env.plot()
 
     def test(self):
         obs, _ = self.env.reset()
