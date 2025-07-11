@@ -60,6 +60,7 @@ class NoThreeCollinearEnv(GridSubsetEnv):
         self.points.append(new_point)
         return False, 1
 
+# This is not fast
 class FastNoThreeCollinearEnv(GridSubsetEnv):
     """
     Uses batch determinant with saved lines(wedge product) computation to accelerate. However, this is not faster.
@@ -340,7 +341,7 @@ class NoThreeInLineRemovalEnv(GridSubsetRemoveEnv):
 
 class NoThreeInLineDominatingEnv(NoThreeCollinearEnvWithPriority):
     '''
-    The diffreent of this environment with the NoThreeCollinearEnvWithPriority is that it allows add points
+    The difference of this environment with the NoThreeCollinearEnvWithPriority is that it allows add points
     even though it creates collinear triple. It will terminate if all points are covered.
     '''
 
@@ -371,15 +372,6 @@ class NoThreeInLineDominatingEnv(NoThreeCollinearEnvWithPriority):
         m, n = self.grid_shape
         fig, ax = plt.subplots(figsize=(n, m))
 
-        # # Plot the priority heatmap
-        # heatmap = np.copy(self.priority_map)
-        # # Replace -inf with min value for display
-        # finite_vals = heatmap[np.isfinite(heatmap)]
-        # min_val = np.min(finite_vals) if finite_vals.size > 0 else 0
-        # heatmap[~np.isfinite(heatmap)] = min_val
-        #
-        # ax.imshow(heatmap, origin='lower', cmap='viridis', alpha=0.4)
-
         # Draw grid lines
         for x in range(n + 1):
             ax.axvline(x - 0.5, color='lightgray', linewidth=1)
@@ -390,18 +382,10 @@ class NoThreeInLineDominatingEnv(NoThreeCollinearEnvWithPriority):
         for p in self.points:
             ax.plot(p.x, p.y, 'o', color='blue', markersize=12)
 
-        # Plot bad point (if any)
-        # if self.badpoint:
-        #     ax.plot(self.badpoint.x, self.badpoint.y, 'o', color='red', markersize=12)
-
         ys, xs = np.where(self.priority_map != -np.inf)
         for x, y in zip(xs, ys):
             if Point(x,y) not in self.points:
                 ax.plot(x, y, 'o', color='green', markersize=12)
-
-        # ys, xs = np.where(np.isfinite(self.priority_map))
-        # for x,y in zip(xs, ys):
-        #     ax.text(x, y, f"{self.priority_map[y, x]:.2f}")
 
         ax.set_xlim(-0.5, n - 0.5)
         ax.set_ylim(-0.5, m - 0.5)
@@ -409,7 +393,6 @@ class NoThreeInLineDominatingEnv(NoThreeCollinearEnvWithPriority):
         ax.set_yticks(range(m))
         ax.set_aspect('equal')
         plt.grid(False)
-        plt.title("Grid with Priority Heatmap")
-        # plt.colorbar(ax.imshow(heatmap, origin='lower', cmap='viridis', alpha=0.4),
-        #              ax=ax, label='Priority')
+        plt.title("Grid with selected points and remaining points")
+
         plt.show()
