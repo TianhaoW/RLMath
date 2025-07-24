@@ -5,3 +5,5 @@ logs/
 /_site/
 /Gemfile.lock
 /archive/
+*/__pycache__/
+*/*/__pycache__/
