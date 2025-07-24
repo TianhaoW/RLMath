@@ -849,6 +849,10 @@ class N3il:
         self.args = args
         self.priority_grid = priority_grid  # Store priority grid
 
+    def state_to_key(self, state):
+        """Convert state to a hashable key for the node registry."""
+        return tuple(state.flatten())
+
     def get_initial_state(self):
         return np.zeros((self.row_count, self.column_count), np.uint8)
 
@@ -1234,7 +1238,215 @@ class ParallelMCTS(MCTS):
             action_probs[child.action_taken] = child.visit_count
         action_probs /= np.sum(action_probs)
         return action_probs
+
+class MCGSNode:
+    """Node class for Monte Carlo Graph Search"""
+    def __init__(self, state, state_key):
+        self.state = state
+        self.state_key = state_key
+        self.lower_bound = 0.0
+        self.upper_bound = 1.0  # V_max equivalent
+        self.outgoing_edges = {}  # action -> (reward, next_state_key)
+        self.has_outgoing_edges = False
+
+class MCGS:
+    """Monte Carlo Graph Search implementation compatible with MCTS interface"""
+    def __init__(self, game, args={
+        'num_searches': 1000,
+        'C': 1.4,
+        'gamma': 0.99  # discount factor for MCGS
+    }):
+        self.game = game
+        self.args = args
+        self.gamma = args.get('gamma', 0.99)
+        self.V_max = 1.0 / (1.0 - self.gamma)
+        self.graph = {}  # state_key -> MCGSNode
+        
+    def search(self, state):
+        """Main MCGS algorithm following the pseudocode"""
+        # Initialize graph with root node
+        root_key = self.game.state_to_key(state)
+        if root_key not in self.graph:
+            self.graph[root_key] = MCGSNode(state.copy(), root_key)
+        
+        budget = self.args.get('num_searches', 1000)
+        
+        if self.args.get('process_bar', False):
+            search_iterator = trange(budget)
+        else:
+            search_iterator = range(budget)
+            
+        for n in search_iterator:
+            # Step 1: Bellman backups to compute value bounds
+            self._compute_value_bounds()
+            
+            # Step 2: Optimistic sampling - follow path with highest upper bounds
+            leaf_key = self._optimistic_sampling(root_key)
+            
+            # Step 3: Node expansion - add all possible actions from leaf
+            if leaf_key in self.graph:
+                self._expand_node(leaf_key)
+        
+        # Step 4: Return action probabilities based on lower bounds
+        return self._get_action_probabilities(root_key)
     
+    def _compute_value_bounds(self):
+        """Compute lower and upper value bounds using Bellman operators"""
+        # Initialize bounds
+        for node in self.graph.values():
+            if not node.has_outgoing_edges:
+                # Sink nodes: evaluate using the game's evaluation function
+                value, is_terminal = self.game.get_value_and_terminated(
+                    node.state, self.game.get_valid_moves(node.state)
+                )
+                if is_terminal:
+                    node.lower_bound = value
+                    node.upper_bound = value
+                else:
+                    node.lower_bound = 0.0
+                    node.upper_bound = self.V_max
+        
+        # Iterate Bellman operators until convergence
+        max_iterations = 100
+        tolerance = 1e-6
+        
+        for iteration in range(max_iterations):
+            old_lower = {k: v.lower_bound for k, v in self.graph.items()}
+            old_upper = {k: v.upper_bound for k, v in self.graph.items()}
+            
+            # Update internal nodes
+            for node in self.graph.values():
+                if node.has_outgoing_edges:
+                    # Lower bound update
+                    max_lower = -np.inf
+                    max_upper = -np.inf
+                    
+                    for action, (reward, next_key) in node.outgoing_edges.items():
+                        if next_key in self.graph:
+                            next_node = self.graph[next_key]
+                            q_lower = reward + self.gamma * next_node.lower_bound
+                            q_upper = reward + self.gamma * next_node.upper_bound
+                            max_lower = max(max_lower, q_lower)
+                            max_upper = max(max_upper, q_upper)
+                    
+                    node.lower_bound = max_lower if max_lower > -np.inf else 0.0
+                    node.upper_bound = max_upper if max_upper > -np.inf else self.V_max
+            
+            # Check convergence
+            converged = True
+            for key in self.graph:
+                if (abs(self.graph[key].lower_bound - old_lower[key]) > tolerance or
+                    abs(self.graph[key].upper_bound - old_upper[key]) > tolerance):
+                    converged = False
+                    break
+            
+            if converged:
+                break
+    
+    def _optimistic_sampling(self, start_key):
+        """Follow optimistic policy to reach a leaf node"""
+        current_key = start_key
+        
+        while current_key in self.graph and self.graph[current_key].has_outgoing_edges:
+            node = self.graph[current_key]
+            
+            # Select action with highest upper bound
+            best_action = None
+            best_value = -np.inf
+            
+            for action, (reward, next_key) in node.outgoing_edges.items():
+                if next_key in self.graph:
+                    next_node = self.graph[next_key]
+                    q_value = reward + self.gamma * next_node.upper_bound
+                    if q_value > best_value:
+                        best_value = q_value
+                        best_action = action
+            
+            if best_action is not None:
+                _, current_key = node.outgoing_edges[best_action]
+            else:
+                break
+        
+        return current_key
+    
+    def _expand_node(self, node_key):
+        """Expand a leaf node by trying all possible actions"""
+        if node_key not in self.graph:
+            return
+            
+        node = self.graph[node_key]
+        valid_moves = self.game.get_valid_moves(node.state)
+        valid_actions = np.where(valid_moves == 1)[0]
+        
+        if len(valid_actions) == 0:
+            return
+        
+        # Try all valid actions
+        for action in valid_actions:
+            # Generate next state using the game model
+            next_state = node.state.copy()
+            next_state = self.game.get_next_state(next_state, action)
+            next_key = self.game.state_to_key(next_state)
+            
+            # Compute immediate reward (difference in game value)
+            old_value, _ = self.game.get_value_and_terminated(
+                node.state, self.game.get_valid_moves(node.state)
+            )
+            new_value, _ = self.game.get_value_and_terminated(
+                next_state, self.game.get_valid_moves(next_state)
+            )
+            reward = new_value - old_value
+            
+            # Add edge to graph
+            node.outgoing_edges[action] = (reward, next_key)
+            
+            # Add next state to graph if not already present
+            if next_key not in self.graph:
+                self.graph[next_key] = MCGSNode(next_state, next_key)
+        
+        node.has_outgoing_edges = True
+    
+    def _get_action_probabilities(self, root_key):
+        """Convert lower bound Q-values to action probabilities"""
+        action_probs = np.zeros(self.game.action_size)
+        
+        if root_key not in self.graph:
+            return action_probs
+        
+        root_node = self.graph[root_key]
+        
+        if not root_node.has_outgoing_edges:
+            # If no outgoing edges, return uniform over valid moves
+            valid_moves = self.game.get_valid_moves(root_node.state)
+            valid_actions = np.where(valid_moves == 1)[0]
+            if len(valid_actions) > 0:
+                for action in valid_actions:
+                    action_probs[action] = 1.0 / len(valid_actions)
+            return action_probs
+        
+        # Compute Q-values using lower bounds (conservative estimate)
+        q_values = {}
+        for action, (reward, next_key) in root_node.outgoing_edges.items():
+            if next_key in self.graph:
+                next_node = self.graph[next_key]
+                q_values[action] = reward + self.gamma * next_node.lower_bound
+            else:
+                q_values[action] = reward
+        
+        if not q_values:
+            return action_probs
+        
+        # Convert to probabilities (softmax-like but focused on best actions)
+        max_q = max(q_values.values())
+        actions_with_max_q = [a for a, q in q_values.items() if abs(q - max_q) < 1e-6]
+        
+        # Give equal probability to all actions with maximum Q-value
+        prob_per_action = 1.0 / len(actions_with_max_q)
+        for action in actions_with_max_q:
+            action_probs[action] = prob_per_action
+        
+        return action_probs
+
 def select_outermost_with_tiebreaker(mcts_probs, n):
     """
     Select an action from the outermost positions among those with the highest MCTS probability.
@@ -1270,7 +1482,13 @@ def evaluate(args):
     # Pass priority_grid to N3il
     n3il = N3il(grid_size=(n, n), args=args, priority_grid=priority_grid_arr)
 
-    mcts_cls = ParallelMCTS if args.get('num_workers', 1) > 1 else MCTS
+    if args['algorithm'] == 'MCGS':
+        if args.get('num_workers', 1) == 1:
+            mcts_cls = MCGS
+        else:
+            raise ValueError("MCGS does not support parallel execution.")
+    else:
+        mcts_cls = MCTS if args.get('num_workers', 1) <= 1 else ParallelMCTS
     mcts = mcts_cls(n3il, args=args)
 
     state = n3il.get_initial_state()
@@ -1313,14 +1531,17 @@ def evaluate(args):
 
 if __name__ == "__main__":
     # Example usage
+
+
     np.random.seed(1)
 
-    n = 20
+    n = 47
 
     args = {
+        'algorithm': 'MCTS',
         'n': n,
         'C': 1.41,  # 1e-7 for n=20
-        'num_searches': 10_000,
+        'num_searches': 100_000,
         'num_workers': 10,      # >1 ⇒ parallel
         'virtual_loss': 1.0,     # magnitude to subtract at reservation
         'process_bar': True,

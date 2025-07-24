@@ -188,7 +188,7 @@ class ViTQNet(nn.Module):
 
     def load_from_checkpoint(self, path: Path, logger=None):
         stem_pattern = re.compile(r"_(\d+)x(\d+)$")
-        pattern = f"{stem_pattern.sub("", str(path.stem))}_*x*.pt"
+        pattern = f"{stem_pattern.sub('', str(path.stem))}_*x*.pt"
         model_dir = path.parent
         candidates = sorted(model_dir.glob(pattern))
         path_str =  str(candidates[-1]) if candidates else None  # use latest
