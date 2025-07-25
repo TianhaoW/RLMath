@@ -7,7 +7,7 @@ import numpy as np
 if __name__ == "__main__":
     # Example usage
 
-    n_list = [47]
+    n_list = [10]
 
     for n in n_list:
 
@@ -17,7 +17,7 @@ if __name__ == "__main__":
                 'algorithm': 'MCTS',
                 'n': n,
                 'C': 1.41,  # 1e-7 for n=20
-                'num_searches': 10*(n**2),  # Adjusted for larger n
+                'num_searches': 100*(n**2),  # Adjusted for larger n
                 'num_workers': 28,      # >1 ⇒ parallel
                 'virtual_loss': 1.0,     # magnitude to subtract at reservation
                 'process_bar': True,
