@@ -1541,8 +1541,8 @@ if __name__ == "__main__":
         'algorithm': 'MCTS',
         'n': n,
         'C': 1.41,  # 1e-7 for n=20
-        'num_searches': 100_000,
-        'num_workers': 10,      # >1 ⇒ parallel
+        'num_searches': 50*(n**2),
+        'num_workers': 28,      # >1 ⇒ parallel
         'virtual_loss': 1.0,     # magnitude to subtract at reservation
         'process_bar': True,
         'display_state': True,
