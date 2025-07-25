@@ -1088,10 +1088,17 @@ class N3il:
                 existing_df = pd.read_csv(csv_file)
                 all_columns = list(existing_df.columns)
                 
-                # Add any new columns from current data_row
-                for key in data_row.keys():
-                    if key not in all_columns:
-                        all_columns.append(key)
+                # Check if there are new columns from current data_row
+                new_columns = [key for key in data_row.keys() if key not in all_columns]
+                
+                if new_columns:
+                    # Add new columns to existing DataFrame with null values
+                    for col in new_columns:
+                        existing_df[col] = None
+                        all_columns.append(col)
+                    
+                    # Save the updated DataFrame with new columns
+                    existing_df.to_csv(csv_file, index=False)
                 
                 # Create new row with all columns (fill missing with None)
                 new_row = {}
