@@ -842,6 +842,7 @@ def simulate_with_priority_nb(state, row_count, column_count, pts_upper_bound, p
 
     return get_value_nb(state, pts_upper_bound)
 
+# This is not gym-compatible, but serves as a base class for MCTS-like algorithms
 class N3il:
     def __init__(self, grid_size, args, priority_grid=None):
         self.row_count, self.column_count = grid_size
