@@ -1,0 +1,6 @@
+algorithm,n,C,num_searches,num_workers,virtual_loss,process_bar,display_state,logging_mode,TopN,simulate_with_priority,table_dir,figure_dir,terminal_num_points,session_name,start_time,end_time,time_used
+MCTS,10,1.41,1000,1,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts,18,20250724_190753_10by10,1753409273.616241,1753409277.584812,3.9685709476470947
+MCTS,10,1.41,1000,1,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts,19,20250724_190919_10by10,1753409359.131854,1753409363.139379,4.0075249671936035
+MCTS,10,1.41,100000,1,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts,18,20250724_191024_10by10,1753409424.49139,1753409473.61853,49.127140045166016
+MCTS,10,1.41,100000,4,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts,19,20250724_191203_10by10,1753409523.655547,1753409557.956322,34.30077505111694
+MCTS,10,1.41,1000,14,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts,19,20250724_192657_10by10,1753410417.381058,1753410420.9455569,3.5644989013671875
