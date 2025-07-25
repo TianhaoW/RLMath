@@ -21,12 +21,12 @@ if __name__ == "__main__":
                 'num_workers': 14,      # >1 ⇒ parallel
                 'virtual_loss': 1.0,     # magnitude to subtract at reservation
                 'process_bar': True,
-                'display_state': True,
+                'display_state': False,
                 'logging_mode': False,
                 'TopN': n,  # Without Priority
                 "simulate_with_priority": False,
                 'table_dir': f'tests/tests_mcts',  # Directory to save tables
-                'figure_dir': f'tests/tests_mcts',  # Directory to save figures
+                'figure_dir': f'tests/tests_mcts/figure',  # Directory to save figures
                 'random_seed': i,  # Use the loop index as a seed for reproducibility
             }
             
