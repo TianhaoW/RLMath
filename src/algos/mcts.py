@@ -37,6 +37,7 @@ def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     n = pts_upper_bound/2
     # return value_f(total) / value_f(pts_upper_bound)
     return (total - 1.5 * n) / (0.5 * n)
+    # return (n - total)/n # Use this to find smallest complete set
 
 # JIT-compiled function to check if three points are collinear
 @njit(cache=True)
