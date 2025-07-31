@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#SBATCH --job-name=mcts_test_51_100     ## job name
+#SBATCH -A NCKAPLAN_LAB     ## Class account to charge resources
+#SBATCH -p free                ## partition name
+#SBATCH --nodes=1             ## (-N) number of nodes the job will use
+#SBATCH --ntasks=1            ## (-n) number of processes to be launched
+#SBATCH -c 28                  ## number of cores
+#SBATCH --mem=16G
+#SBATCH --time 3-00:00:00     ## time limit (1 day?)
+#SBATCH --error=logs/slurm-%J.err  ## error log file
+#SBATCH --output=logs/slurm-%J.out ## output log file
+#SBATCH --mail-type=fail,end
+#SBATCH --mail-user=luoninz1@uci.edu
+
+module load miniconda3/24.9.2
+source /opt/apps/miniconda3/24.9.2/etc/profile.d/conda.sh
+conda activate mcgs-env
+python tests/tests_mcts/mcts_n_51-100.py > logs/mcts_n_51-100.log
