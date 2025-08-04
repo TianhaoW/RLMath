@@ -867,3 +867,8 @@ MCTS,10,1.41,10000,1,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_m
 MCTS,10,1.41,10000,1,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts/figure,19,20250804_121215_10by10,1754334735.3323252,1754334742.514852,7.1825268268585205,0,N3il
 MCTS,20,1.41,40000,1,1.0,True,True,False,20,False,tests/tests_mcts,tests/tests_mcts/figure,36,20250804_121309_20by20,1754334789.639636,1754334904.444105,114.80446887016296,0,N3il_with_symmetry
 MCTS,10,1.41,10000,28,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts/figure,19,20250804_122702_10by10,1754335622.74888,1754335629.214265,6.46538519859314,0,N3il_with_symmetry
+MCTS,10,1.41,10000,28,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts/figure,19,20250804_122845_10by10,1754335725.017313,1754335731.4029388,6.385625839233398,0,N3il
+MCTS,10,1.41,10000,1,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts/figure,19,20250804_122900_10by10,1754335740.040163,1754335747.1776798,7.137516736984253,0,N3il
+MCTS,10,1.41,10000,1,1.0,True,True,False,10,False,tests/tests_mcts,tests/tests_mcts/figure,19,20250804_122915_10by10,1754335755.246829,1754335762.4439528,7.197123765945435,0,N3il_with_symmetry
+MCTS,20,1.41,40000,28,1.0,True,True,False,20,False,tests/tests_mcts,tests/tests_mcts/figure,38,20250804_123121_20by20,1754335881.7427561,1754335947.368216,65.62545990943909,0,N3il_with_symmetry
+MCTS,20,1.41,40000,28,1.0,True,True,False,20,False,tests/tests_mcts,tests/tests_mcts/figure,37,20250804_123634_20by20,1754336194.572045,1754336264.1297438,69.55769872665405,0,N3il

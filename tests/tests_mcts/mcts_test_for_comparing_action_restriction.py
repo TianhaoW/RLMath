@@ -7,14 +7,14 @@ import numpy as np
 if __name__ == "__main__":
     # Example usage
 
-    n_list = [10]
+    n_list = [20]
 
     for n in n_list:
 
         for i in range(1):
 
             args = {
-                'environment': 'N3il_with_symmetry',  # Specify the environment
+                'environment': 'N3il',  # Specify the environment
                 'algorithm': 'MCTS',
                 'n': n,
                 'C': 1.41,  # 1e-7 for n=20
