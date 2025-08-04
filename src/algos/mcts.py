@@ -20,7 +20,7 @@ from typing import Tuple, List, Set, Callable, NamedTuple, Union, Optional, Iter
 from multiprocessing import Pool
 from sympy import Rational, Integer
 from sympy.core.numbers import igcd
-from src.envs import N3il, supnorm_priority, supnorm_priority_array
+from src.envs import N3il, N3il_with_symmetry, supnorm_priority, supnorm_priority_array
 
 import psutil
 import os
@@ -786,22 +786,32 @@ def select_outermost_with_tiebreaker(mcts_probs, n):
     # Break ties randomly among outermost positions
     chosen_pos = outermost_positions[np.random.choice(len(outermost_positions))]
     action = chosen_pos[0] * n + chosen_pos[1]
-    return action
+    return action 
 
 def evaluate(args):
     priority_grid_arr = supnorm_priority_array(args['n'])
     start = time.time()
     n = args['n']
-    # Pass priority_grid to N3il
-    n3il = N3il(grid_size=(n, n), args=args, priority_grid=priority_grid_arr)
+
+    # Define the environment based on args
+    if args['environment'] == 'N3il_with_symmetry':
+        n3il =  N3il_with_symmetry(grid_size=(args['n'], args['n']), args=args, priority_grid=priority_grid_arr)
+    elif args['environment'] == 'N3il':
+        n3il = N3il(grid_size=(args['n'], args['n']), args=args, priority_grid=priority_grid_arr)
+    else:
+        raise ValueError(f"Unknown environment: {args['environment']}")
 
     if args['algorithm'] == 'MCGS':
         if args.get('num_workers', 1) == 1:
             mcts_cls = MCGS
         else:
             raise ValueError("MCGS does not support parallel execution.")
-    else:
+    elif args['algorithm'] == 'MCTS':
         mcts_cls = MCTS if args.get('num_workers', 1) <= 1 else ParallelMCTS
+    else:
+        raise ValueError(f"Unknown algorithm: {args['algorithm']}")
+    
+    # Initialize MCTS or MCGS
     mcts = mcts_cls(n3il, args=args)
 
     state = n3il.get_initial_state()
