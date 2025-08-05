@@ -1,7 +1,7 @@
 import itertools
 import numpy as np
 print(np.__version__)
-np.random.seed(0)
+# np.random.seed(0)  # Removed global seed, will be set per experiment
 from tqdm import trange
 from numba import njit
 import threading
@@ -421,7 +421,7 @@ def point_collinear_count(p1: Point, grid_size: int) -> int:
     return counts
 
 # NOISE = random.uniform(-0.1, 0.1) 
-NOISE =  0
+NOISE = 0  # Will be set based on random seed if needed
 
 def collinear_count_priority(n):
     def priority(point):
@@ -845,6 +845,21 @@ def simulate_with_priority_nb(state, row_count, column_count, pts_upper_bound, p
 # This is not gym-compatible, but serves as a base class for MCTS-like algorithms
 class N3il:
     def __init__(self, grid_size, args, priority_grid=None):
+        # Set random seed for reproducibility
+        if 'random_seed' in args:
+            np.random.seed(args['random_seed'])
+            random.seed(args['random_seed'])
+            # Trigger numba compilation with seeded state
+            _ = simulate_nb(np.zeros((2, 2), dtype=np.int8), 2, 2, 4)
+        
+        self.row_count, self.column_count = grid_size
+        self.action_size = self.row_count * self.column_count
+        self.pts_upper_bound = self.row_count * self.column_count
+        self.priority_grid = priority_grid if priority_grid is not None else np.zeros(grid_size)
+        self.args = args
+        
+        # Set max_level_to_use_symmetry with default value
+        self.max_level_to_use_symmetry = args.get('max_level_to_use_symmetry', 0)
         self.row_count, self.column_count = grid_size
         self.pts_upper_bound = np.min(grid_size) * 2
         self.action_size = self.row_count * self.column_count
@@ -1423,6 +1438,8 @@ class N3il_with_symmetry(N3il):
     """
 
     def __init__(self, grid_size, args, priority_grid=None):
+        super().__init__(grid_size, args, priority_grid)
+        # Random seed is already set in parent class
         super().__init__(grid_size, args, priority_grid)
         self.max_level_to_use_symmetry = args['max_level_to_use_symmetry']
         self.use_symmetry = True if self.max_level_to_use_symmetry > 0 else False

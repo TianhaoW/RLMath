@@ -1,7 +1,7 @@
 import itertools
 import numpy as np
 print(np.__version__)
-np.random.seed(0)
+# np.random.seed(0)  # Removed global seed, will be set per experiment
 from tqdm import trange
 from numba import njit
 import threading
@@ -24,6 +24,15 @@ from src.envs import N3il, N3il_with_symmetry, supnorm_priority, supnorm_priorit
 
 import psutil
 import os
+
+def set_seeds(seed):
+    """Set random seeds for reproducibility across all random number generators."""
+    np.random.seed(seed)
+    random.seed(seed)
+    # Force compilation of numba functions with the seeded state
+    # This ensures numba's internal random state is also seeded
+    from numba import config
+    config.THREADING_LAYER = 'safe'
 
 @njit(cache=True)
 def value_fn_nb(x):
@@ -177,6 +186,7 @@ def simulate_nb(state, row_count, column_count, pts_upper_bound):
     Perform random rollout until no valid moves remain.
     Return normalized value using a custom value function.
     Uses get_valid_moves_subset_nb for incremental validity updates.
+    Note: This function uses numba's random number generator which is seeded globally.
     """
     max_size = row_count * column_count
     # Initial valid moves mask
@@ -185,9 +195,6 @@ def simulate_nb(state, row_count, column_count, pts_upper_bound):
 
     while total_valid > 0:
         # Build list of valid actions
-
-
-
         acts = np.empty(total_valid, np.int64)
         k = 0
         for idx in range(max_size):
@@ -541,7 +548,13 @@ class ParallelMCTS(MCTS):
         sims_per_worker = self.args['num_searches'] // self.num_workers
         remainder       = self.args['num_searches'] %  self.num_workers
 
-        def worker(n_sims):
+        def worker(n_sims, worker_id=0):
+            # Set deterministic seed for this worker thread
+            if 'random_seed' in self.args:
+                worker_seed = self.args['random_seed'] + worker_id * 10000
+                np.random.seed(worker_seed)
+                random.seed(worker_seed)
+            
             if self.args['process_bar'] == True:
                 for worker_iter in trange(n_sims):
                     self._search_once(root, worker_iter)
@@ -550,10 +563,10 @@ class ParallelMCTS(MCTS):
                     self._search_once(root, worker_iter)
 
         with ThreadPoolExecutor(max_workers=self.num_workers) as pool:
-            futures = [pool.submit(worker, sims_per_worker)
-                       for _ in range(self.num_workers)]
+            futures = [pool.submit(worker, sims_per_worker, worker_id)
+                       for worker_id in range(self.num_workers)]
             if remainder:                     # handle leftovers
-                futures.append(pool.submit(worker, remainder))
+                futures.append(pool.submit(worker, remainder, self.num_workers))
             wait(futures)
 
         # convert visit counts → prob. vector
@@ -775,6 +788,7 @@ def select_outermost_with_tiebreaker(mcts_probs, n):
     """
     Select an action from the outermost positions among those with the highest MCTS probability.
     If multiple actions have the same max probability and distance to edge, break ties randomly.
+    Note: Uses numpy's random number generator which should be seeded for reproducibility.
     """
     # Reshape the 1D probability array to 2D grid
     mcts_probs_2d = mcts_probs.reshape((n, n))
@@ -797,9 +811,16 @@ def select_outermost_with_tiebreaker(mcts_probs, n):
     # Break ties randomly among outermost positions
     chosen_pos = outermost_positions[np.random.choice(len(outermost_positions))]
     action = chosen_pos[0] * n + chosen_pos[1]
-    return action 
+    return action
 
 def evaluate(args):
+    # Set random seeds for reproducibility at the start of evaluation
+    if 'random_seed' in args:
+        set_seeds(args['random_seed'])
+        # Also warmup numba functions with seeded state
+        dummy_state = np.zeros((2, 2), dtype=np.int8)
+        _ = simulate_nb(dummy_state, 2, 2, 4)
+    
     priority_grid_arr = supnorm_priority_array(args['n'])
     start = time.time()
     n = args['n']
