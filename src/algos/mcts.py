@@ -346,10 +346,21 @@ class Node:
         self._vl = args.get('virtual_loss', 1.0)
 
         if parent is None:
-            self.valid_moves = game.get_valid_moves(state)
+            self.level = np.sum(state)  # Level is the number of points placed
+            if self.level <= game.max_level_to_use_symmetry:
+                self.valid_moves = game.get_valid_moves_with_symmetry(state)
+            else:
+                self.valid_moves = game.get_valid_moves(state)
         else:
-            self.valid_moves = game.get_valid_moves_subset(
-                parent.state, parent.valid_moves, self.action_taken)
+            self.level = parent.level + 1
+            if self.level <= game.max_level_to_use_symmetry:
+                self.valid_moves = game.get_valid_moves_subset_with_symmetry(
+                    parent.state, parent.valid_moves, self.action_taken)
+            else:
+                self.valid_moves = game.get_valid_moves_subset(
+                    parent.state, parent.valid_moves, self.action_taken)
+
+
 
         self.is_full = False
         self._cached_ucb = None     # Cached UCB value

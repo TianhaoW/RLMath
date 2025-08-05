@@ -1424,16 +1424,18 @@ class N3il_with_symmetry(N3il):
 
     def __init__(self, grid_size, args, priority_grid=None):
         super().__init__(grid_size, args, priority_grid)
+        self.max_level_to_use_symmetry = args['max_level_to_use_symmetry']
+        self.use_symmetry = True if self.max_level_to_use_symmetry > 0 else False
 
-    def get_valid_moves(self, state):
+    def get_valid_moves_with_symmetry(self, state):
         # Parent valid moves (already possibly TopN-prioritized)
         valid_moves = super().get_valid_moves(state)
-        # Subgroup-based filtering
+
         return filter_actions_by_stabilizer_nb(
             valid_moves, state, self.row_count, self.column_count
         )
 
-    def get_valid_moves_subset(self, parent_state, parent_valid_moves, action_taken):
+    def get_valid_moves_subset_with_symmetry(self, parent_state, parent_valid_moves, action_taken):
         valid_moves = super().get_valid_moves_subset(parent_state, parent_valid_moves, action_taken)
 
         # Build child state to compute stabilizer at the node where these moves apply

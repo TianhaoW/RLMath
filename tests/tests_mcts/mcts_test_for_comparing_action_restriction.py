@@ -14,8 +14,9 @@ if __name__ == "__main__":
         for i in range(1):
 
             args = {
-                'environment': 'N3il',  # Specify the environment
+                'environment': 'N3il_with_symmetry',  # Specify the environment
                 'algorithm': 'MCTS',
+                'max_level_to_use_symmetry': 1,  # No symmetry for this test
                 'n': n,
                 'C': 1.41,  # 1e-7 for n=20
                 'num_searches': 100*(n**2),  # Adjusted for larger n
