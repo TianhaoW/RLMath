@@ -30,7 +30,7 @@ if __name__ == "__main__":
                 'n': n,
                 'C': 1.41,  # 1e-7 for n=20
                 'num_searches': 100*(n**2),  # Adjusted for larger n
-                'num_workers': 28,      # >1 ⇒ parallel
+                'num_workers': 4,      # >1 ⇒ parallel
                 'virtual_loss': 1.0,     # magnitude to subtract at reservation
                 'process_bar': True,
                 'display_state': True,
