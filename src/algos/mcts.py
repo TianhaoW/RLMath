@@ -34,35 +34,141 @@ def set_seeds(seed):
     from numba import config
     config.THREADING_LAYER = 'safe'
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
+def exploration_decay_nb(x):  # Monotone-down from (0,1) to (1,0)
+    # Linear
+    # return 1 - 0.7 * x   # Found optimal 4-point solution: 86/100 times (86.0%)
+    # return 1 - x # 85/100 times (85.0%)
+
+    # Square root (gentle early decay)
+    # return 1 - 0.9 * np.sqrt(x) # 91/100 times (91.0%)
+    # return 1 - 1 * np.sqrt(x) # 83/100 times (83.0%)
+    # return 1 - 0.5 * np.sqrt(x) # 88/100 times (88.0%)
+    # return 1 - 0.7 * np.sqrt(x) # 86%
+    #return 1 - 0.8 * np.sqrt(x) # 92/100 times (92.0%)
+    return 1 - 0.85 * np.sqrt(x)
+
+    # Quadratic (faster decay)
+    # return 1 - (x ** 2)
+
+    # Exponential (custom normalization)
+    # return ((np.exp(1)/(np.exp(1)-1))**2) * ((np.exp(-x)-np.exp(-1)) ** 2) # 85/100 times (85.0%)
+
+    # Exponential fast (k=3)
+    #k = 3.0
+    # return (np.exp(-k * x) - np.exp(-k)) / (1 - np.exp(-k)) # 90/100 times (90.0%)
+
+    # Exponential slow (k=1)
+    # k = 1.0
+    # return (np.exp(-k * x) - np.exp(-k)) / (1 - np.exp(-k)) # 86/100 times (86.0%)
+
+    # Cosine decay
+    # return 0.5 * (1 + np.cos(np.pi * x)) # 85/100 times (85.0%)
+
+    # Rational decay
+    # a = 1.0
+    # return (1 - x) / (1 + a * x) # solution: 90/100 times (90.0%)
+
+    # Logistic decay
+    # k = 10.0
+    # g0 = 1 / (1 + np.exp(k * (0 - 0.5)))
+    # g1 = 1 / (1 + np.exp(k * (1 - 0.5)))
+    # gx = 1 / (1 + np.exp(k * (x - 0.5)))
+    # return (gx - g1) / (g0 - g1) # 86/100 times (86.0%)
+
+    # Cubic decay
+    # return 1 - x ** 3 # 91/100 times (91.0%)
+    # return 1 - (0.9 * (x ** 3)) # 91/100 times (91.0%)
+
+@njit(cache=True, nogil=True)
 def value_fn_nb(x):
     # return x
     # return np.exp(x)
     return x
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     total = np.sum(state)
     n = pts_upper_bound/2
-    # return value_f(total) / value_f(pts_upper_bound)
-    # return (total - 1.5 * n) / (0.5 * n)
     
-    # For finding smallest complete set: higher reward for fewer points
-    # This returns values in range [0, 1] where 1 = no points, 0 = maximum points
-    # return (n - total) / n  # Use this to find smallest complete set
+    # === REVERSE REWARDING FUNCTIONS (prefer smaller point counts) ===
     
-    # Exponential preference for smaller sets (more aggressive)
-    # return np.exp(-2.0 * (total / n))  # Range: [e^-10, 1] ≈ [0.000045, 1]
-    return np.exp(-(total / n))  # Range: [e^-1, 1]
+    # 1. Simple Linear Inverse: 1.0 for empty board, 0.0 for full board
+    # return (n - total) / n  # Range: [0, 1]
+    
+    # 2. Exponential Decay (Strong preference for fewer points)
+    # return np.exp(-2.0 * (total / n))  # Range: [e^-2, 1] ≈ [0.135, 1]
+    # return np.exp(-1.0 * (total / n))  # Range: [e^-1, 1] ≈ [0.368, 1]
+    # return np.exp(-0.5 * (total / n))  # Range: [e^-0.5, 1] ≈ [0.607, 1]
+    
+    # 3. Power Functions (Adjustable curvature)
+    # return ((n - total) / n) ** 2  # Quadratic preference: [0, 1]
+    # return ((n - total) / n) ** 0.5  # Square root preference: [0, 1]
+    # return ((n - total) / n) ** 3  # Cubic preference (very aggressive): [0, 1]
+    
+    # 4. Sigmoid-based (Smooth transition around target)
+    # target = n * 0.3  # Target 30% of grid filled
+    # return 1.0 / (1.0 + np.exp(0.5 * (total - target)))  # Range: ≈[0, 1]
+    # return 1.0 / (1.0 + np.exp(1.0 * (total - target)))  # Steeper transition
+    
+    # 5. Logarithmic Penalty
+    # return max(0, 1.0 - np.log(1.0 + total) / np.log(1.0 + n))  # Range: [0, 1]
+    
+    # 6. ReLU-based with different thresholds
+    # return max(0, (1.2 * n - total) / n)  # Reward up to 120% of n: [0, 1.2]
+    # return max(0, (1.5 * n - total) / n)  # Current: reward up to 150% of n
+    
+    # === OPTIMAL FOR 3x3 MINIMAL COMPLETE SET (4 points) ===
+    # Simple linear inverse works best for finding exact minimal sets
+    return (1.6*n - total) / 0.3 * n  # Range: [0, 1], 1.0 for empty, 0.0 for full
+    # return max(0, (2.0 * n - total) / n)  # Aggressive: reward up to 200% of n
+    # return ((1.6*n - total)**10) / ((0.3 * n)**10)  # Range: [0, 1], 1.0 for empty, 0.0 for full
+    
+    # 7. Inverse with offset (avoid division by zero issues)
+    # return 1.0 / (1.0 + total / n)  # Range: [0.5, 1]
+    # return 2.0 / (2.0 + total / n)  # Range: [0.67, 1]
+    
+    # 8. Piecewise Linear (Different slopes in different regions)
+    # if total <= n * 0.5:
+    #     return 1.0 - 0.2 * (total / (n * 0.5))  # Gentle penalty for first half
+    # else:
+    #     return 0.8 - 0.8 * ((total - n * 0.5) / (n * 0.5))  # Steep penalty after
+    
+    # 9. Trigonometric (Smooth curves)
+    # return np.cos(np.pi * total / (2.0 * n))  # Cosine curve: [0, 1]
+    # return (1.0 + np.cos(np.pi * total / n)) / 2.0  # Shifted cosine: [0, 1]
+    
+    # 10. Hyperbolic (Sharp drop-off)
+    # return 1.0 / (1.0 + (total / n) ** 2)  # Range: [0.5, 1]
+    # return 2.0 / (2.0 + (total / n) ** 2)  # Range: [0.67, 1]
+    
+    # 11. Exponential with different bases
+    # return 0.5 ** (total / n)  # Base 0.5: [0.5^1, 1] ≈ [0.5, 1]
+    # return 0.1 ** (total / n)  # Base 0.1: [0.1^1, 1] ≈ [0.1, 1]
+    
+    # 12. Multi-threshold rewards (step function)
+    # if total <= n * 0.25: return 1.0      # Excellent
+    # elif total <= n * 0.5: return 0.8     # Good
+    # elif total <= n * 0.75: return 0.5    # OK
+    # else: return 0.1                      # Poor
+    
+    # 13. Gaussian-like (bell curve centered at 0)
+    # return np.exp(-0.5 * (total / (n * 0.3)) ** 2)  # Range: [exp(-∞), 1]
+    
+    # 14. Rational functions
+    # return (n - total) / (n + total)  # Range: [-1, 1], but clipped to [0, 1]
+    # return max(0, (n - total) / (n + total))
+    
+    # 15. Custom hybrid (combine multiple preferences)
+    # linear_part = (n - total) / n
+    # exp_part = np.exp(-total / n)
+    # return 0.7 * linear_part + 0.3 * exp_part  # Weighted combination
 
-    # ReLU
-    # return max(0, (1.5 * n - total) / ((1.5-0.8)*n))  # Range: [0, 1]
-
-    # Square root preference (gentler)
-    # return np.sqrt((n - total) / n)  # Range: [0, 1]
+    # =============Positive rewards for larger set sizes=============
+    # return (total - 1.5*n) / 0.5*n  # Normalized value function, range [0, 1]
 
 # JIT-compiled function to check if three points are collinear
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _are_collinear(x1, y1, x2, y2, x3, y3):
     return (y1 - y2) * (x1 - x3) == (y1 - y3) * (x1 - x2)
 
@@ -422,7 +528,7 @@ class Node:
                 return child._cached_ucb
 
             q_value = child.value_sum / child.visit_count
-            T_i = self.args['C'] * (1-iter/self.args['num_searches'])
+            T_i = self.args['C'] * exploration_decay_nb(iter/self.args['num_searches'])
             exploration_value = T_i * math.sqrt(log_N / child.visit_count)
             ucb = q_value + exploration_value
             # print("Exploit:", q_value)
