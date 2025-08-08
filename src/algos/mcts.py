@@ -5,7 +5,7 @@ print(np.__version__)
 from tqdm import trange
 from numba import njit
 import threading
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, wait, as_completed
 import random
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
@@ -45,8 +45,21 @@ def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     total = np.sum(state)
     n = pts_upper_bound/2
     # return value_f(total) / value_f(pts_upper_bound)
-    return (total - 1.5 * n) / (0.5 * n)
-    # return (n - total)/n # Use this to find smallest complete set
+    # return (total - 1.5 * n) / (0.5 * n)
+    
+    # For finding smallest complete set: higher reward for fewer points
+    # This returns values in range [0, 1] where 1 = no points, 0 = maximum points
+    # return (n - total) / n  # Use this to find smallest complete set
+    
+    # Exponential preference for smaller sets (more aggressive)
+    # return np.exp(-2.0 * (total / n))  # Range: [e^-10, 1] ≈ [0.000045, 1]
+    return np.exp(-(total / n))  # Range: [e^-1, 1]
+
+    # ReLU
+    # return max(0, (1.5 * n - total) / ((1.5-0.8)*n))  # Range: [0, 1]
+
+    # Square root preference (gentler)
+    # return np.sqrt((n - total) / n)  # Range: [0, 1]
 
 # JIT-compiled function to check if three points are collinear
 @njit(cache=True)
@@ -575,6 +588,220 @@ class ParallelMCTS(MCTS):
             action_probs[child.action_taken] = child.visit_count
         action_probs /= np.sum(action_probs)
         return action_probs
+    
+
+# ---------- Leaf/Child Paralllel MCTS ------------------------------------------------
+
+def _rollout_many(child, R: int):
+    """Run child.simulate() R times in the same worker thread; return the list of values."""
+    if R <= 1:
+        return [child.simulate()]
+    vals = []
+    for _ in range(R):
+        vals.append(child.simulate())
+    return vals
+
+# --- Child-parallel expansion node ---
+class LeafChildParallelNode(Node):
+    """
+    Node class that expands all children in parallel (child-parallel expansion).
+    """
+    def __init__(self, game, args, state, parent=None, action_taken=None):
+        super().__init__(game, args, state, parent, action_taken)
+
+    def expand(self):
+        """
+        Expand all valid children in parallel and return a randomly chosen child.
+        Important: do not mutate self.valid_moves until children are constructed,
+        because Node.__init__ of children depends on parent's valid mask.
+        """
+        # Snapshot the parent's valid mask first
+        with self.lock:
+            valid_indices = np.where(self.valid_moves == 1)[0]
+            if len(valid_indices) == 0:
+                self.is_full = True
+                return None
+            parent_valid_snapshot = self.valid_moves.copy()
+            parent_state = self.state  # read-only usage below
+
+        # Build children in parallel
+        def build_child(action):
+            # Construct child state
+            child_state = parent_state.copy()
+            child_state = self.game.get_next_state(child_state, action)
+            # Create child node (this will compute valid moves once)
+            child = LeafChildParallelNode(self.game, self.args, child_state, self, action)
+            # Optionally, we can override with our own subset computation using the snapshot:
+            # This avoids recomputing if Node.__init__ is heavy or if we want to be explicit.
+            try:
+                child_valid = get_valid_moves_subset_nb(
+                    parent_state,
+                    parent_valid_snapshot,
+                    action,
+                    self.game.row_count,
+                    self.game.column_count
+                )
+                child.valid_moves = child_valid
+            except Exception:
+                # Fallback: keep whatever Node.__init__ computed
+                pass
+            return child
+
+        children = []
+        with ThreadPoolExecutor(max_workers=min(len(valid_indices), 32)) as executor:
+            futures = [executor.submit(build_child, a) for a in valid_indices]
+            for fut in futures:
+                children.append(fut.result())
+
+        # Append children and then mark fully expanded
+        with self.lock:
+            self.children.extend(children)
+            # Now it is safe to mark all these actions as used
+            self.valid_moves[valid_indices] = 0
+            self.is_full = True
+
+        # Return a random child for compatibility with the base MCTS flow
+        return random.choice(children) if children else None
+
+class LeafChildParallelMCTS(MCTS):
+    """
+    MCTS variant that supports both leaf-parallel and child-parallel simulation strategies.
+    - Leaf-parallel: Run multiple rollouts from a leaf before backpropagation.
+    - Child-parallel: When expanding a node, run one simulation from each child in parallel.
+      (If both are set, runs multiple rollouts per child in parallel.)
+    """
+    def __init__(self, game, args):
+        super().__init__(game, args)
+        self.num_workers = args.get('num_workers', 4)
+        self.simulations_per_leaf = args.get('simulations_per_leaf', 1)
+        self.child_parallel = args.get('child_parallel', True)
+        self.virtual_loss = args.get('virtual_loss', 1.0)
+        self.args = args
+
+    def _simulate_leaf_parallel(self, node, num_simulations):
+        """
+        Run multiple rollouts from a single leaf; return list of values.
+        No backprop here; caller will backprop in main thread.
+        """
+        if num_simulations <= 1:
+            return [node.simulate()]
+        # Usually we don't need virtual loss here, selection is single-threaded
+        with ThreadPoolExecutor(max_workers=min(num_simulations, self.num_workers)) as pool:
+            futures = [pool.submit(node.simulate) for _ in range(num_simulations)]
+            return [f.result() for f in futures]
+
+    def _simulate_child_parallel(self, node, num_simulations):
+        """
+        Expand all valid children and run multiple rollouts per child in parallel.
+        Returns a list of tuples: (child, [values...]).
+        """
+        # Snapshot parent's valid mask to avoid mutation races
+        with node.lock:
+            valid_indices = np.where(node.valid_moves == 1)[0]
+            if valid_indices.size == 0:
+                node.is_full = True
+                return []
+            parent_valid_snapshot = node.valid_moves.copy()
+            parent_state = node.state
+
+        # Build children in parallel first (no backprop here)
+        def build_child(action):
+            child_state = parent_state.copy()
+            child_state = self.game.get_next_state(child_state, action)
+            child = LeafChildParallelNode(self.game, self.args, child_state, node, action)
+            # Override child's valid mask using snapshot so we don't recompute later
+            try:
+                child_valid = get_valid_moves_subset_nb(
+                    parent_state,
+                    parent_valid_snapshot,
+                    action,
+                    self.game.row_count,
+                    self.game.column_count
+                )
+                child.valid_moves = child_valid
+            except Exception:
+                pass
+            return child
+
+        children = []
+        with ThreadPoolExecutor(max_workers=min(len(valid_indices), self.num_workers)) as pool:
+            futures = [pool.submit(build_child, a) for a in valid_indices]
+            for fut in futures:
+                children.append(fut.result())
+
+        # Attach children and mark node fully expanded
+        with node.lock:
+            node.children.extend(children)
+            node.valid_moves[valid_indices] = 0
+            node.is_full = True
+
+        # Now run R rollouts per child in parallel; collect results (no backprop here)
+        results = []
+        with ThreadPoolExecutor(max_workers=self.num_workers) as pool:
+            futs = [pool.submit(_rollout_many, child, num_simulations) for child in children]
+            for child, fut in zip(children, futs):
+                vals = fut.result()
+                results.append((child, vals))
+
+        # Backprop only in the main thread to avoid data races
+        for child, vals in results:
+            for v in vals:
+                child.backpropagate(v)
+
+        return results
+
+    def search(self, state):
+        root = LeafChildParallelNode(self.game, self.args, state)
+        num_searches = self.args.get('num_searches', 1000)
+        process_bar = self.args.get('process_bar', False)
+        search_iterator = trange(num_searches) if process_bar else range(num_searches)
+
+        for search in search_iterator:
+            node = root
+            # 1) Selection (single-threaded)
+            while node.is_fully_expanded():
+                node = node.select(iter=search)
+
+            # 2) If child-parallel enabled and node not yet expanded → expand + run
+            if self.child_parallel and not node.is_fully_expanded():
+                self._simulate_child_parallel(node, self.simulations_per_leaf)
+                # Everything done inside; continue to next simulation
+                continue
+
+            # 3) Otherwise do leaf-parallel on a single child
+            # If node is not root and terminal, just backprop its terminal value
+            if node.action_taken is not None:
+                value, is_terminal = self.game.get_value_and_terminated(node.state, node.valid_moves)
+                if is_terminal:
+                    node.backpropagate(value)
+                    continue
+                # Expand one child (this expand returns a random child)
+                node = node.expand()
+                if node is None:
+                    # No child could be expanded; treat as terminal with zero
+                    continue
+                values = self._simulate_leaf_parallel(node, self.simulations_per_leaf)
+            else:
+                # Root case: expand first
+                node = node.expand()
+                if node is None:
+                    continue
+                values = self._simulate_leaf_parallel(node, self.simulations_per_leaf)
+
+            # Backprop the leaf-parallel values
+            for v in values:
+                node.backpropagate(v)
+
+        # 4) Action probabilities from root's children
+        action_probs = np.zeros(self.game.action_size)
+        total = 0
+        for child in root.children:
+            action_probs[child.action_taken] = child.visit_count
+            total += child.visit_count
+        if total > 0:
+            action_probs /= total
+        return action_probs
+
 
 class MCGSNode:
     """Node class for Monte Carlo Graph Search"""
@@ -837,9 +1064,17 @@ def evaluate(args):
         if args.get('num_workers', 1) == 1:
             mcts_cls = MCGS
         else:
-            raise ValueError("MCGS does not support parallel execution.")
+            raise ValueError("MCGS does not support parallel execution yet.")
     elif args['algorithm'] == 'MCTS':
-        mcts_cls = MCTS if args.get('num_workers', 1) <= 1 else ParallelMCTS
+        # Check if leaf/child parallel is requested
+        if args.get('child_parallel', False) or args.get('simulations_per_leaf', 1) > 1:
+            mcts_cls = LeafChildParallelMCTS
+        elif args.get('num_workers', 1) <= 1:
+            mcts_cls = MCTS
+        else:
+            mcts_cls = ParallelMCTS
+    elif args['algorithm'] == 'LeafChildParallelMCTS':
+        mcts_cls = LeafChildParallelMCTS
     else:
         raise ValueError(f"Unknown algorithm: {args['algorithm']}")
     
