@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>PyVis Multi-Snapshot Viewer</title>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #toolbar { display:flex; gap:8px; align-items:center; padding:10px; border-bottom:1px solid #eee; }
+    #mynetwork { height: calc(100vh - 54px); }
+    button, select { padding:6px 10px; border-radius:8px; border:1px solid #ddd; background:#fafafa; }
+    #title { font-weight:600; margin-left:8px; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="prev">⟵ Prev</button>
+    <button id="next">Next ⟶</button>
+    <select id="jump"></select>
+    <span id="title"></span>
+  </div>
+  <div id="mynetwork"></div>
+
+  <!-- vis-network (vis.js) -->
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script>
+    const snapshots = [{"id": "v0", "title": "Snapshot 0", "nodes": [{"color": "#97c2fc", "id": 1, "label": "State 0 - Node 1", "shape": "dot"}, {"color": "#97c2fc", "id": 2, "label": "State 0 - Node 2", "shape": "dot"}, {"color": "#97c2fc", "id": 3, "label": "State 0 - Node 3", "shape": "dot"}], "edges": [{"from": 1, "to": 2, "arrows": "to"}, {"from": 2, "to": 3, "arrows": "to"}]}, {"id": "v1", "title": "Snapshot 1", "nodes": [{"color": "#97c2fc", "id": 1, "label": "State 1 - Node 1", "shape": "dot"}, {"color": "#97c2fc", "id": 2, "label": "State 1 - Node 2", "shape": "dot"}], "edges": [{"from": 1, "to": 2, "arrows": "to"}, {"from": 1, "to": 1, "arrows": "to"}]}, {"id": "v2", "title": "Snapshot 2", "nodes": [{"color": "#97c2fc", "id": 1, "label": "State 2 - Node 1", "shape": "dot"}, {"color": "#97c2fc", "id": 2, "label": "State 2 - Node 2", "shape": "dot"}, {"color": "#97c2fc", "id": 3, "label": "State 2 - Node 3", "shape": "dot"}], "edges": [{"from": 1, "to": 2, "arrows": "to"}, {"from": 2, "to": 3, "arrows": "to"}]}, {"id": "v3", "title": "Snapshot 3", "nodes": [{"color": "#97c2fc", "id": 1, "label": "State 3 - Node 1", "shape": "dot"}, {"color": "#97c2fc", "id": 2, "label": "State 3 - Node 2", "shape": "dot"}], "edges": [{"from": 1, "to": 2, "arrows": "to"}, {"from": 1, "to": 1, "arrows": "to"}]}, {"id": "v4", "title": "Snapshot 4", "nodes": [{"color": "#97c2fc", "id": 1, "label": "State 4 - Node 1", "shape": "dot"}, {"color": "#97c2fc", "id": 2, "label": "State 4 - Node 2", "shape": "dot"}, {"color": "#97c2fc", "id": 3, "label": "State 4 - Node 3", "shape": "dot"}], "edges": [{"from": 1, "to": 2, "arrows": "to"}, {"from": 2, "to": 3, "arrows": "to"}]}];
+    let idx = 0;
+
+    // 初始化 DataSet 与 Network
+    const nodes = new vis.DataSet([]);
+    const edges = new vis.DataSet([]);
+    const container = document.getElementById('mynetwork');
+    const network = new vis.Network(container, { nodes, edges }, {
+      physics: true,
+      interaction: { hover: true },
+      layout: { improvedLayout: true }
+    });
+
+    // 切换加载某个快照
+    function load(i) {
+      idx = (i + snapshots.length) % snapshots.length;
+      const s = snapshots[idx];
+      nodes.clear(); edges.clear();
+      nodes.add(s.nodes); edges.add(s.edges);
+      document.getElementById('title').textContent = s.title + " (" + s.id + ")";
+      document.getElementById('jump').value = String(idx);
+      // 适当缩放到合适视图
+      requestAnimationFrame(() => network.fit({ animation: true }));
+    }
+
+    // UI 绑定
+    document.getElementById('prev').onclick = () => load(idx - 1);
+    document.getElementById('next').onclick = () => load(idx + 1);
+
+    const sel = document.getElementById('jump');
+    snapshots.forEach((s, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = s.title;
+      sel.appendChild(opt);
+    });
+    sel.onchange = (e) => load(parseInt(e.target.value));
+
+    // 启动
+    load(0);
+  </script>
+</body>
+</html>

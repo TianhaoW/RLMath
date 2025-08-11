@@ -120,7 +120,7 @@ def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     
     # === OPTIMAL FOR 3x3 MINIMAL COMPLETE SET (4 points) ===
     # Simple linear inverse works best for finding exact minimal sets
-    return (1.6*n - total) * n / (1.6 - 1.3) # Range: [0, 1], 1.0 for empty, 0.0 for full !!!CURRENT OPTIMAL!!!
+    return (1.6*n - total) * n  / (1.6 - 1.3)# Range: [0, 1], 1.0 for empty, 0.0 for full !!!CURRENT OPTIMAL!!!
 
     # Baseline rewarding function
     '''
