@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, default=3, help="Starting value of n (inclusive)")
     parser.add_argument("--end", type=int, default=100, help="Ending value of n (exclusive)")
     parser.add_argument("--step", type=int, default=100, help="Step size for n values")
-    parser.add_argument("--repeat", type=int, default=10, help="Number of runs for each n value")
+    parser.add_argument("--repeat", type=int, default=1, help="Number of runs for each n value")
     args_cli = parser.parse_args()
 
     # Generate list of n values
@@ -46,6 +46,7 @@ if __name__ == "__main__":
                 'table_dir': os.path.dirname(__file__),  # Directory to save tables
                 'figure_dir': os.path.join(os.path.dirname(__file__), 'figure'),  # Directory to save figures
                 'random_seed': i,  # Use the loop index as a seed for reproducibility
+                'tree_visualization': True,  # Enable tree visualization
             }
             
             # Get the result from evaluate function

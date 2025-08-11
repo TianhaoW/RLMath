@@ -46,6 +46,7 @@ if __name__ == "__main__":
                 'table_dir': os.path.dirname(__file__),  # Directory to save tables
                 'figure_dir': os.path.join(os.path.dirname(__file__), 'figure'),  # Directory to save figures
                 'random_seed': i,  # Use the loop index as a seed for reproducibility
+                'tree_visualization': False,  # Set to True to enable tree visualization
             }
             
             # Get the result from evaluate function

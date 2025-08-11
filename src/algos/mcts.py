@@ -21,6 +21,9 @@ from multiprocessing import Pool
 from sympy import Rational, Integer
 from sympy.core.numbers import igcd
 from src.envs import N3il, N3il_with_symmetry, supnorm_priority, supnorm_priority_array
+import io
+import base64
+from pyvis.network import Network
 
 import psutil
 import os
@@ -491,13 +494,15 @@ class Node:
 
         if parent is None:
             self.level = np.sum(state)  # Level is the number of points placed
-            if self.level <= game.max_level_to_use_symmetry:
+            if (self.level <= game.max_level_to_use_symmetry and 
+                hasattr(game, 'get_valid_moves_with_symmetry')):
                 self.valid_moves = game.get_valid_moves_with_symmetry(state)
             else:
                 self.valid_moves = game.get_valid_moves(state)
         else:
             self.level = parent.level + 1
-            if self.level <= game.max_level_to_use_symmetry:
+            if (self.level <= game.max_level_to_use_symmetry and 
+                hasattr(game, 'get_valid_moves_subset_with_symmetry')):
                 self.valid_moves = game.get_valid_moves_subset_with_symmetry(
                     parent.state, parent.valid_moves, self.action_taken)
             else:
@@ -600,6 +605,384 @@ class MCTS:
     }):
         self.game = game
         self.args = args
+        self.snapshots = []  # Store tree snapshots for multi-snapshot viewing
+
+    def _state_to_image_base64(self, state):
+        """
+        Convert a game state to a base64-encoded image using the game's display_state method.
+        """
+        # Temporarily modify the game's display settings to avoid saving files
+        original_display = self.game.args.get('display_state', False)
+        original_figure_dir = self.game.args.get('figure_dir', '')
+        
+        # Create a temporary figure
+        plt.figure(figsize=(4, 4))
+        
+        # Get the grid info
+        rows, cols = self.game.row_count, self.game.column_count
+        
+        # Plot the state (simplified version of display_state)
+        y_idx, x_idx = np.nonzero(state)
+        y_disp = rows - 1 - y_idx
+        plt.scatter(x_idx, y_disp, s=200, c='blue', linewidths=0.5)
+        
+        # Draw grid
+        plt.xticks(range(cols))
+        plt.yticks(range(rows))
+        plt.grid(True, alpha=0.3)
+        plt.xlim(-0.5, cols - 0.5)
+        plt.ylim(-0.5, rows - 0.5)
+        plt.gca().set_aspect('equal')
+        
+        # Remove axes labels and ticks for cleaner look
+        plt.xticks([])
+        plt.yticks([])
+        
+        # Save to base64
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=80, pad_inches=0.1)
+        buf.seek(0)
+        img_base64 = base64.b64encode(buf.read()).decode()
+        plt.close()
+        
+        return f"data:image/png;base64,{img_base64}"
+
+    def _get_node_label(self, node, iter_num=None):
+        """
+        Generate a label for a node showing its statistics.
+        """
+        avg_value = node.value_sum / node.visit_count if node.visit_count > 0 else 0
+        
+        # Calculate UCB if this node has a parent
+        ucb = 0
+        if node.parent is not None and node.visit_count > 0:
+            try:
+                ucb = node.parent.get_ucb(node, iter_num or 0)
+            except:
+                ucb = 0
+        
+        label = f"Visits: {node.visit_count}\n"
+        label += f"Value Sum: {node.value_sum:.3f}\n"
+        label += f"Avg Value: {avg_value:.3f}\n"
+        label += f"UCB: {ucb:.3f}"
+        
+        return label
+
+    def tree_visualization(self, root, snapshot_name="MCTS Tree"):
+        """
+        Create a tree visualization using pyvis and save it as a snapshot.
+        """
+        net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", directed=True)
+        net.barnes_hut()
+        
+        # Add nodes to the network using BFS to assign levels
+        queue = [(root, 0)]  # (node, level)
+        node_id = 0
+        node_mapping = {}
+        
+        while queue:
+            current_node, level = queue.pop(0)
+            
+            # Generate unique node ID
+            current_id = f"node_{node_id}"
+            node_mapping[id(current_node)] = current_id
+            node_id += 1
+            
+            # Get node image and label
+            img_base64 = self._state_to_image_base64(current_node.state)
+            label = self._get_node_label(current_node)
+            
+            # Add node to network
+            net.add_node(
+                current_id,
+                label=label,
+                image=img_base64,
+                shape="image",
+                size=30,
+                level=level,
+                title=f"Action: {current_node.action_taken}\n{label}"
+            )
+            
+            # Add children to queue
+            for child in current_node.children:
+                queue.append((child, level + 1))
+        
+        # Add edges
+        queue = [root]
+        while queue:
+            current_node = queue.pop(0)
+            current_id = node_mapping[id(current_node)]
+            
+            for child in current_node.children:
+                child_id = node_mapping[id(child)]
+                net.add_edge(current_id, child_id)
+                queue.append(child)
+        
+        # Configure layout
+        net.set_options("""
+        var options = {
+            "layout": {
+                "hierarchical": {
+                    "enabled": true,
+                    "direction": "UD",
+                    "sortMethod": "directed",
+                    "shakeTowards": "roots",
+                    "levelSeparation": 150,
+                    "nodeSpacing": 100
+                }
+            },
+            "physics": {
+                "hierarchicalRepulsion": {
+                    "centralGravity": 0.0,
+                    "springLength": 100,
+                    "springConstant": 0.01,
+                    "nodeDistance": 120,
+                    "damping": 0.09
+                },
+                "maxVelocity": 50,
+                "solver": "hierarchicalRepulsion",
+                "stabilization": {"iterations": 100}
+            },
+            "nodes": {
+                "font": {
+                    "size": 12,
+                    "color": "white"
+                }
+            },
+            "edges": {
+                "smooth": {
+                    "type": "cubicBezier",
+                    "forceDirection": "vertical",
+                    "roundness": 0.4
+                }
+            }
+        }
+        """)
+        
+        # Store this snapshot
+        self.snapshots.append({
+            'name': snapshot_name,
+            'network': net,
+            'html': net.generate_html()
+        })
+        
+        return net
+
+    def save_multi_snapshot_html(self, filename="mcts_tree_snapshots.html"):
+        """
+        Create an HTML file with all snapshots that allows switching between them.
+        """
+        if not self.snapshots:
+            print("No snapshots to save.")
+            return
+        
+        # Start building the HTML content
+        html_content = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MCTS Tree Snapshots</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+        }
+        .controls {
+            margin-bottom: 20px;
+            text-align: center;
+            background-color: #333;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .controls button, .controls select {
+            margin: 0 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #444;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .controls button:hover, .controls select:hover {
+            background-color: #555;
+        }
+        .snapshot-container {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            display: none;
+            background-color: #222;
+        }
+        .snapshot-container.active {
+            display: block;
+        }
+        .info {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .instructions {
+            text-align: center;
+            margin-bottom: 10px;
+            font-style: italic;
+            color: #aaa;
+        }
+    </style>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+    <h1 style="text-align: center;">MCTS Tree Visualization - Multi Snapshot View</h1>
+    <div class="instructions">Use the controls below or arrow keys (← →) to navigate between snapshots</div>
+    <div class="controls">
+        <button onclick="previousSnapshot()">← Previous</button>
+        <select id="snapshotSelect" onchange="selectSnapshot()">"""
+        
+        # Add snapshot options
+        for i, snapshot in enumerate(self.snapshots):
+            html_content += f'<option value="{i}">{snapshot["name"]}</option>'
+        
+        html_content += """
+        </select>
+        <button onclick="nextSnapshot()">Next →</button>
+    </div>
+    <div class="info">
+        <span id="currentInfo">Snapshot 1 of """ + str(len(self.snapshots)) + """</span>
+    </div>
+    
+"""
+        
+        # Add snapshot containers
+        for i, snapshot in enumerate(self.snapshots):
+            active_class = "active" if i == 0 else ""
+            unique_id = f"snapshot{i}"
+            html_content += f'''
+    <div id="{unique_id}" class="snapshot-container {active_class}">
+        <div id="vis{i}" style="width: 100%; height: 100%;"></div>
+    </div>
+'''
+        
+        # Add the JavaScript to create all networks
+        html_content += '''
+    <script>
+        let currentSnapshot = 0;
+        const totalSnapshots = ''' + str(len(self.snapshots)) + ''';
+        let networks = [];
+        
+        // Network data for each snapshot
+        const snapshotData = ['''
+        
+        # Add network data for each snapshot
+        for i, snapshot in enumerate(self.snapshots):
+            if i > 0:
+                html_content += ','
+            # Get the network from the snapshot and extract nodes and edges
+            net = snapshot['network']
+            nodes_data = []
+            edges_data = []
+            
+            # Extract node and edge information
+            # Note: This is a simplified approach. In a real implementation,
+            # you might want to store the raw data separately.
+            html_content += f'''
+            {{
+                "name": "{snapshot['name']}",
+                "nodes": [],
+                "edges": []
+            }}'''
+        
+        html_content += '''
+        ];
+        
+        function initializeNetworks() {
+            // For now, create simple placeholder networks
+            // In a full implementation, you would recreate the actual network data
+            for (let i = 0; i < totalSnapshots; i++) {
+                const container = document.getElementById('vis' + i);
+                const nodes = new vis.DataSet([
+                    {id: 'root', label: 'Loading...', x: 0, y: 0}
+                ]);
+                const edges = new vis.DataSet([]);
+                const data = { nodes: nodes, edges: edges };
+                const options = {
+                    layout: {
+                        hierarchical: {
+                            enabled: true,
+                            direction: "UD"
+                        }
+                    },
+                    physics: {
+                        enabled: false
+                    }
+                };
+                networks[i] = new vis.Network(container, data, options);
+            }
+        }
+        
+        function showSnapshot(index) {
+            // Hide all snapshots
+            for (let i = 0; i < totalSnapshots; i++) {
+                document.getElementById('snapshot' + i).classList.remove('active');
+            }
+            
+            // Show selected snapshot
+            document.getElementById('snapshot' + index).classList.add('active');
+            document.getElementById('snapshotSelect').value = index;
+            document.getElementById('currentInfo').textContent = 
+                'Snapshot ' + (index + 1) + ' of ' + totalSnapshots + ' - ' + snapshotData[index].name;
+                
+            // Fit the network
+            if (networks[index]) {
+                setTimeout(() => networks[index].fit(), 100);
+            }
+        }
+        
+        function nextSnapshot() {
+            currentSnapshot = (currentSnapshot + 1) % totalSnapshots;
+            showSnapshot(currentSnapshot);
+        }
+        
+        function previousSnapshot() {
+            currentSnapshot = (currentSnapshot - 1 + totalSnapshots) % totalSnapshots;
+            showSnapshot(currentSnapshot);
+        }
+        
+        function selectSnapshot() {
+            currentSnapshot = parseInt(document.getElementById('snapshotSelect').value);
+            showSnapshot(currentSnapshot);
+        }
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'ArrowLeft') {
+                previousSnapshot();
+            } else if (event.key === 'ArrowRight') {
+                nextSnapshot();
+            }
+        });
+        
+        // Initialize when page loads
+        window.addEventListener('load', function() {
+            initializeNetworks();
+            showSnapshot(0);
+        });
+    </script>
+</body>
+</html>
+'''
+        
+        # Save the file
+        with open(filename, 'w') as f:
+            f.write(html_content)
+        
+        print(f"Multi-snapshot visualization saved as: {filename}")
+        print(f"Total snapshots: {len(self.snapshots)}")
+        print("Note: This is a simplified version. Individual snapshots can be saved separately for full functionality.")
 
     def search(self, state):
         # define root
@@ -635,6 +1018,26 @@ class MCTS:
         for child in root.children:
             action_probs[child.action_taken] = child.visit_count
         action_probs /= np.sum(action_probs)
+        
+        # Add tree visualization if enabled
+        if self.args.get('tree_visualization', False):
+            # Create snapshot name based on current game state
+            num_points = np.sum(state)
+            snapshot_name = f"Step {num_points}: {num_points} points placed"
+            
+            # Display the tree
+            self.tree_visualization(root, snapshot_name)
+            
+            # Prompt user for action probability output
+            try:
+                response = input("Output action prob? (y/n): ").strip().lower()
+                if response == 'y':
+                    print("Action probabilities:")
+                    print(action_probs)
+            except (EOFError, KeyboardInterrupt):
+                # Handle cases where input is not available (e.g., in automated runs)
+                pass
+        
         return action_probs
             
             # expansion
@@ -1233,6 +1636,39 @@ def evaluate(args):
                 time_used=end - start
             )
             
+            # Save tree visualization snapshots if enabled
+            if args.get('tree_visualization', False) and hasattr(mcts, 'snapshots') and mcts.snapshots:
+                # Create filenames with timestamp and configuration info
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                # Determine the web visualization directory
+                # If figure_dir is specified, create web_visualization folder within its parent directory
+                if 'figure_dir' in args:
+                    # Get the parent directory of figure_dir (should be the test script directory)
+                    script_dir = os.path.dirname(args['figure_dir'])
+                    web_viz_dir = os.path.join(script_dir, 'web_visualization')
+                else:
+                    # Fallback to current directory with web_visualization subfolder
+                    web_viz_dir = './web_visualization'
+                
+                # Create the web visualization directory
+                os.makedirs(web_viz_dir, exist_ok=True)
+                
+                # Save multi-snapshot HTML
+                multi_filename = os.path.join(web_viz_dir, f"mcts_tree_multi_n{args['n']}_points{num_of_points}_{timestamp}.html")
+                mcts.save_multi_snapshot_html(multi_filename)
+                
+                # Also save individual snapshots for full functionality
+                for i, snapshot in enumerate(mcts.snapshots):
+                    individual_filename = os.path.join(web_viz_dir, f"mcts_tree_step{i}_n{args['n']}_{timestamp}.html")
+                    try:
+                        snapshot['network'].save_graph(individual_filename)
+                        print(f"Individual snapshot {i+1} saved as: {individual_filename}")
+                    except Exception as e:
+                        print(f"Warning: Could not save individual snapshot {i+1}: {e}")
+                
+                print(f"Tree visualization files saved to: {web_viz_dir}")
+                
             break
 
         # Get MCTS probabilities
