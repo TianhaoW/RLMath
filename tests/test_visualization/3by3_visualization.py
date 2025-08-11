@@ -4,20 +4,22 @@ import sys
 import os
 import argparse
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from src.algos.mcts import evaluate
+from src.algos.mcts import evaluate, MCTS
 
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run MCTS tests for a range of n values.")
     parser.add_argument("--start", type=int, default=3, help="Starting value of n (inclusive)")
-    parser.add_argument("--end", type=int, default=100, help="Ending value of n (exclusive)")
-    parser.add_argument("--step", type=int, default=100, help="Step size for n values")
-    parser.add_argument("--repeat", type=int, default=1, help="Number of runs for each n value")
+    parser.add_argument("--end", type=int, default=4, help="Ending value of n (exclusive)")
+    parser.add_argument("--step", type=int, default=1, help="Step size for n values")
+    parser.add_argument("--repeat", type=int, default=2, help="Number of runs for each n value")
     args_cli = parser.parse_args()
 
     # Generate list of n values
     n_list = range(args_cli.start, args_cli.end, args_cli.step)
 
+    # Clear any previous global data before starting new experiments
+    MCTS.clear_global_data()
 
     # Store results for all trials
     all_results = {}
@@ -35,7 +37,7 @@ if __name__ == "__main__":
                 'max_level_to_use_symmetry': -1,  # Use symmetry for first 2 levels (helps find compact solutions)
                 'n': n,
                 'C': 1.41,  # 1e-7 for n=20
-                'num_searches': 100*(n**2),  # Adjusted for larger n
+                'num_searches': 50,  # Reduced for testing tree visualization
                 'num_workers': 1,      # >1 ⇒ parallel
                 'virtual_loss': 1.0,     # magnitude to subtract at reservation
                 'process_bar': True,
@@ -47,6 +49,7 @@ if __name__ == "__main__":
                 'figure_dir': os.path.join(os.path.dirname(__file__), 'figure'),  # Directory to save figures
                 'random_seed': i,  # Use the loop index as a seed for reproducibility
                 'tree_visualization': True,  # Enable tree visualization
+                'pause_at_each_step': False,  # Disable interactive prompts for automation
             }
             
             # Get the result from evaluate function
@@ -81,4 +84,20 @@ if __name__ == "__main__":
         if n == 3:
             optimal_count = freq.get(4, 0)
             print(f"  → Found optimal 4-point solution: {optimal_count}/{len(results)} times ({100*optimal_count/len(results):.1f}%)")
-        print()              
+        print()
+    
+    # Generate comprehensive visualization after all trials
+    print("\n" + "="*60)
+    print("GENERATING COMPREHENSIVE TREE VISUALIZATION")
+    print("="*60)
+    
+    web_viz_dir = os.path.join(os.path.dirname(__file__), 'web_visualization')
+    experiment_name = f"mcts_n{args_cli.start}-{args_cli.end-1}_trials{args_cli.repeat}"
+    
+    final_html = MCTS.save_final_visualization(web_viz_dir, experiment_name)
+    
+    if final_html:
+        print(f"🎉 Comprehensive visualization saved to: {final_html}")
+        print(f"📊 Open this file in a web browser to explore all trials and steps interactively!")
+    else:
+        print("❌ No visualization data found.")                            

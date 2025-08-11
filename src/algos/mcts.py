@@ -599,6 +599,9 @@ class Node:
             self.parent.backpropagate(value)
 
 class MCTS:
+    # Global storage for all trials and steps (class variable)
+    global_trial_data = []
+    
     def __init__(self, game, args={
         'num_searches': 1000,
         'C': 1.4
@@ -606,6 +609,7 @@ class MCTS:
         self.game = game
         self.args = args
         self.snapshots = []  # Store tree snapshots for multi-snapshot viewing
+        self.trial_id = None  # Will be set when starting a new trial
 
     def _state_to_image_base64(self, state):
         """
@@ -671,28 +675,55 @@ class MCTS:
     def tree_visualization(self, root, snapshot_name="MCTS Tree"):
         """
         Create a tree visualization using pyvis and save it as a snapshot.
+        Ensures all expanded nodes are captured, including nodes with no children.
         """
         net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", directed=True)
         net.barnes_hut()
         
-        # Add nodes to the network using BFS to assign levels
-        queue = [(root, 0)]  # (node, level)
-        node_id = 0
+        # Collect all nodes using DFS to ensure we capture everything
+        all_nodes = []
+        visited = set()
+        
+        def collect_nodes_dfs(node, level=0):
+            if id(node) in visited:
+                return
+            visited.add(id(node))
+            all_nodes.append((node, level))
+            
+            # Recursively collect children
+            for child in node.children:
+                collect_nodes_dfs(child, level + 1)
+        
+        # Start DFS from root
+        collect_nodes_dfs(root)
+        
+        print(f"Tree visualization: Found {len(all_nodes)} nodes total")
+        
+        # Prepare JSON-serializable data for nodes and edges
+        json_nodes = []
+        json_edges = []
         node_mapping = {}
         
-        while queue:
-            current_node, level = queue.pop(0)
-            
+        # Add nodes to the network
+        for i, (node, level) in enumerate(all_nodes):
             # Generate unique node ID
-            current_id = f"node_{node_id}"
-            node_mapping[id(current_node)] = current_id
-            node_id += 1
+            current_id = f"node_{i}"
+            node_mapping[id(node)] = current_id
             
             # Get node image and label
-            img_base64 = self._state_to_image_base64(current_node.state)
-            label = self._get_node_label(current_node)
+            img_base64 = self._state_to_image_base64(node.state)
+            label = self._get_node_label(node)
             
-            # Add node to network
+            # Determine node color based on properties
+            color = "#4CAF50"  # Default green
+            if node.is_fully_expanded():
+                color = "#2196F3"  # Blue for fully expanded
+            elif len(node.children) == 0 and not node.is_fully_expanded():
+                color = "#FF9800"  # Orange for leaf nodes that could expand
+            elif np.sum(node.valid_moves) == 0:
+                color = "#F44336"  # Red for terminal nodes
+            
+            # Add node to pyvis network
             net.add_node(
                 current_id,
                 label=label,
@@ -700,23 +731,39 @@ class MCTS:
                 shape="image",
                 size=30,
                 level=level,
-                title=f"Action: {current_node.action_taken}\n{label}"
+                color=color,
+                title=f"Action: {node.action_taken}\n{label}\nChildren: {len(node.children)}\nValid moves left: {np.sum(node.valid_moves)}"
             )
             
-            # Add children to queue
-            for child in current_node.children:
-                queue.append((child, level + 1))
+            # Prepare JSON data for this node - split label into lines for proper display
+            label_lines = label.split('\n')
+            json_nodes.append({
+                "id": current_id,
+                "label": label_lines,  # Use array of lines instead of single string
+                "image": img_base64,
+                "shape": "image", 
+                "size": 30,
+                "level": level,
+                "color": color,
+                "title": f"Action: {node.action_taken}\\n{label.replace(chr(10), '\\n')}\\nChildren: {len(node.children)}\\nValid moves left: {np.sum(node.valid_moves)}",
+                "x": i * 100,  # Simple layout
+                "y": level * 150
+            })
         
-        # Add edges
-        queue = [root]
-        while queue:
-            current_node = queue.pop(0)
-            current_id = node_mapping[id(current_node)]
-            
-            for child in current_node.children:
-                child_id = node_mapping[id(child)]
-                net.add_edge(current_id, child_id)
-                queue.append(child)
+        # Add edges between nodes
+        for node, _ in all_nodes:
+            current_id = node_mapping[id(node)]
+            for child in node.children:
+                if id(child) in node_mapping:  # Ensure child was also collected
+                    child_id = node_mapping[id(child)]
+                    net.add_edge(current_id, child_id)
+                    json_edges.append({
+                        "from": current_id,
+                        "to": child_id,
+                        "smooth": {"type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4}
+                    })
+        
+        print(f"Tree visualization: Added {len(net.nodes)} nodes and {len(net.edges)} edges")
         
         # Configure layout
         net.set_options("""
@@ -759,16 +806,452 @@ class MCTS:
         }
         """)
         
-        # Store this snapshot
-        self.snapshots.append({
+        # Store this snapshot with trial information
+        snapshot_data = {
             'name': snapshot_name,
             'network': net,
-            'html': net.generate_html()
-        })
+            'html': net.generate_html(),
+            'trial_id': getattr(self, 'trial_id', 'unknown'),
+            'step_number': len(self.snapshots),
+            'total_nodes': len(all_nodes),
+            'args': self.args.copy(),  # Store configuration for reference
+            'json_nodes': json_nodes,  # Add JSON data for better HTML generation
+            'json_edges': json_edges
+        }
+        
+        self.snapshots.append(snapshot_data)
+        
+        # Also add to global trial data for multi-trial viewing
+        MCTS.global_trial_data.append(snapshot_data)
         
         return net
 
-    def save_multi_snapshot_html(self, filename="mcts_tree_snapshots.html"):
+    @classmethod
+    def clear_global_data(cls):
+        """Clear all global trial data. Call this at the start of a new experiment set."""
+        cls.global_trial_data.clear()
+        print("Global trial data cleared.")
+    
+    @classmethod 
+    def save_final_visualization(cls, web_viz_dir=None, experiment_name="mcts_experiment"):
+        """
+        Save the final comprehensive visualization at the end of all trials.
+        """
+        if not cls.global_trial_data:
+            print("No global trial data to save.")
+            return None
+            
+        if web_viz_dir is None:
+            web_viz_dir = './web_visualization'
+        
+        # Create the web visualization directory
+        os.makedirs(web_viz_dir, exist_ok=True)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(web_viz_dir, f"{experiment_name}_comprehensive_{timestamp}.html")
+        
+        # Save comprehensive visualization
+        cls.save_comprehensive_html(filename)
+        
+        return filename
+
+    @classmethod
+    def save_comprehensive_html(cls, filename="mcts_comprehensive_visualization.html"):
+        """
+        Create a comprehensive HTML file with all trials and steps using JSON data.
+        Includes trial selection, step selection, and navigation.
+        """
+        if not cls.global_trial_data:
+            print("No global trial data to save.")
+            return
+            
+        # Organize data by trial and step
+        trials_data = {}
+        json_snapshots = []
+        
+        for snapshot in cls.global_trial_data:
+            trial_id = snapshot['trial_id']
+            step_num = snapshot['step_number']
+            
+            if trial_id not in trials_data:
+                trials_data[trial_id] = {}
+            trials_data[trial_id][step_num] = snapshot
+            
+            # Prepare JSON snapshot data
+            json_snapshots.append({
+                "id": f"t{trial_id}_s{step_num}",
+                "title": f"Trial {trial_id} - {snapshot['name']}",
+                "trial_id": trial_id,
+                "step_number": step_num,
+                "total_nodes": snapshot['total_nodes'],
+                "nodes": snapshot.get('json_nodes', []),
+                "edges": snapshot.get('json_edges', []),
+                "grid_size": snapshot.get('args', {}).get('n', 'unknown')
+            })
+        
+        print(f"Organizing {len(cls.global_trial_data)} snapshots across {len(trials_data)} trials")
+        
+        # Also save JSON data to separate file
+        import json
+        json_filename = filename.replace('.html', '_data.json')
+        with open(json_filename, 'w', encoding='utf-8') as f:
+            json.dump(json_snapshots, f, indent=2, ensure_ascii=False)
+        print(f"JSON data saved to: {json_filename}")
+        
+        # Create the comprehensive HTML using the improved approach
+        html_content = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MCTS Comprehensive Tree Visualization</title>
+  <style>
+    body {{ 
+        margin: 0; 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background-color: #1a1a1a;
+        color: #ffffff;
+    }}
+    #toolbar {{ 
+        display: flex; 
+        gap: 12px; 
+        align-items: center; 
+        padding: 16px; 
+        border-bottom: 1px solid #333; 
+        background-color: #2d2d2d;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }}
+    #mynetwork {{ 
+        height: calc(100vh - 120px); 
+        background-color: #222222;
+        border-radius: 8px;
+        margin: 16px;
+        border: 1px solid #444;
+    }}
+    button, select {{ 
+        padding: 8px 16px; 
+        border-radius: 6px; 
+        border: 1px solid #555; 
+        background: #3a3a3a; 
+        color: #ffffff;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-size: 14px;
+    }}
+    button:hover, select:hover {{
+        background: #4a4a4a;
+    }}
+    button:disabled {{
+        background: #2a2a2a;
+        color: #666;
+        cursor: not-allowed;
+    }}
+    #title {{ 
+        font-weight: 600; 
+        margin-left: 16px; 
+        font-size: 16px;
+        color: #4CAF50;
+    }}
+    .stats {{
+        display: flex;
+        gap: 16px;
+        margin-left: auto;
+        font-size: 12px;
+        color: #aaa;
+    }}
+    .stat-item {{
+        background: #333;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }}
+    .keyboard-help {{
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        background: #333;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #aaa;
+        border: 1px solid #444;
+    }}
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="prev">← Prev Step</button>
+    <button id="next">Next Step →</button>
+    <select id="trialSelect">
+        <option value="">Select Trial...</option>"""
+        
+        # Add trial options
+        for trial_id in sorted(trials_data.keys()):
+            trial_steps = len(trials_data[trial_id])
+            html_content += f'<option value="{trial_id}">Trial {trial_id} ({trial_steps} steps)</option>'
+        
+        html_content += f"""
+    </select>
+    <select id="stepSelect">
+        <option value="">Select Step...</option>
+    </select>
+    <button id="autoPlay">⏯ Auto Play</button>
+    <span id="title">MCTS Tree Visualization</span>
+    <div class="stats">
+        <div class="stat-item">Nodes: <span id="nodeCount">-</span></div>
+        <div class="stat-item">Grid: <span id="gridSize">-</span></div>
+        <div class="stat-item">Step: <span id="currentStep">-</span></div>
+    </div>
+  </div>
+  <div id="mynetwork"></div>
+  <div class="keyboard-help">
+    ⌨️ Use ← → for steps, ↑ ↓ for trials, Space for auto-play
+  </div>
+
+  <!-- vis-network (vis.js) -->
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script>
+    const snapshots = {json.dumps(json_snapshots, ensure_ascii=False, indent=2)};
+    let currentIdx = 0;
+    let autoPlayInterval = null;
+    let isAutoPlaying = false;
+
+    // Initialize DataSet and Network
+    const nodes = new vis.DataSet([]);
+    const edges = new vis.DataSet([]);
+    const container = document.getElementById('mynetwork');
+    const network = new vis.Network(container, {{ nodes, edges }}, {{
+      layout: {{
+        hierarchical: {{
+          enabled: true,
+          direction: "UD",
+          sortMethod: "directed",
+          levelSeparation: 150,
+          nodeSpacing: 100,
+          treeSpacing: 200
+        }}
+      }},
+      physics: {{
+        hierarchicalRepulsion: {{
+          centralGravity: 0.0,
+          springLength: 100,
+          springConstant: 0.01,
+          nodeDistance: 120,
+          damping: 0.09
+        }},
+        maxVelocity: 50,
+        solver: "hierarchicalRepulsion",
+        stabilization: {{iterations: 100}}
+      }},
+      nodes: {{
+        font: {{ 
+          size: 11, 
+          color: '#ffffff',
+          multi: false,
+          align: 'center'
+        }},
+        borderWidth: 2,
+        shadow: true,
+        widthConstraint: {{ maximum: 150 }},
+        heightConstraint: {{ minimum: 80 }}
+      }},
+      edges: {{
+        color: {{ color: '#666666' }},
+        smooth: {{
+          type: "cubicBezier",
+          forceDirection: "vertical",
+          roundness: 0.4
+        }},
+        arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }}
+      }},
+      interaction: {{ hover: true }},
+      configure: {{ enabled: false }}
+    }});
+
+    // Load a specific snapshot
+    function loadSnapshot(idx) {{
+      if (idx < 0 || idx >= snapshots.length) return;
+      
+      currentIdx = idx;
+      const snapshot = snapshots[idx];
+      
+      // Clear and add new data
+      nodes.clear();
+      edges.clear();
+      
+      // Process nodes - convert label arrays to multi-line text
+      if (snapshot.nodes && snapshot.nodes.length > 0) {{
+        const processedNodes = snapshot.nodes.map(node => {{
+          if (Array.isArray(node.label)) {{
+            // Convert array of lines to newline-separated text for vis.js
+            node.label = node.label.join('\\n');
+          }}
+          return node;
+        }});
+        nodes.add(processedNodes);
+      }}
+      if (snapshot.edges && snapshot.edges.length > 0) {{
+        edges.add(snapshot.edges);
+      }}
+      
+      // Update UI
+      document.getElementById('title').textContent = snapshot.title;
+      document.getElementById('nodeCount').textContent = snapshot.total_nodes;
+      document.getElementById('gridSize').textContent = snapshot.grid_size;
+      document.getElementById('currentStep').textContent = `${{snapshot.step_number + 1}}/${{getStepsForTrial(snapshot.trial_id)}}`;
+      
+      // Update dropdowns
+      document.getElementById('trialSelect').value = snapshot.trial_id;
+      updateStepDropdown(snapshot.trial_id);
+      document.getElementById('stepSelect').value = snapshot.step_number;
+      
+      // Update button states
+      updateButtons();
+      
+      // Fit the network view
+      setTimeout(() => network.fit({{ animation: true }}), 100);
+    }}
+    
+    function getStepsForTrial(trialId) {{
+      return snapshots.filter(s => s.trial_id === trialId).length;
+    }}
+    
+    function updateStepDropdown(trialId) {{
+      const stepSelect = document.getElementById('stepSelect');
+      stepSelect.innerHTML = '<option value="">Select Step...</option>';
+      
+      const trialSnapshots = snapshots.filter(s => s.trial_id === trialId).sort((a, b) => a.step_number - b.step_number);
+      trialSnapshots.forEach(snapshot => {{
+        const option = document.createElement('option');
+        option.value = snapshot.step_number;
+        option.textContent = `Step ${{snapshot.step_number + 1}} (${{snapshot.total_nodes}} nodes)`;
+        stepSelect.appendChild(option);
+      }});
+    }}
+    
+    function updateButtons() {{
+      const prevBtn = document.getElementById('prev');
+      const nextBtn = document.getElementById('next');
+      
+      prevBtn.disabled = currentIdx <= 0;
+      nextBtn.disabled = currentIdx >= snapshots.length - 1;
+    }}
+    
+    function toggleAutoPlay() {{
+      isAutoPlaying = !isAutoPlaying;
+      const btn = document.getElementById('autoPlay');
+      
+      if (isAutoPlaying) {{
+        btn.textContent = '⏸ Pause';
+        autoPlayInterval = setInterval(() => {{
+          if (currentIdx < snapshots.length - 1) {{
+            loadSnapshot(currentIdx + 1);
+          }} else {{
+            toggleAutoPlay(); // Stop at end
+          }}
+        }}, 2000);
+      }} else {{
+        btn.textContent = '⏯ Auto Play';
+        if (autoPlayInterval) {{
+          clearInterval(autoPlayInterval);
+          autoPlayInterval = null;
+        }}
+      }}
+    }}
+
+    // Event handlers
+    document.getElementById('prev').onclick = () => loadSnapshot(currentIdx - 1);
+    document.getElementById('next').onclick = () => loadSnapshot(currentIdx + 1);
+    document.getElementById('autoPlay').onclick = toggleAutoPlay;
+    
+    document.getElementById('trialSelect').onchange = (e) => {{
+      if (e.target.value) {{
+        updateStepDropdown(e.target.value);
+        const firstStep = snapshots.find(s => s.trial_id === e.target.value);
+        if (firstStep) {{
+          const idx = snapshots.indexOf(firstStep);
+          loadSnapshot(idx);
+        }}
+      }}
+    }};
+    
+    document.getElementById('stepSelect').onchange = (e) => {{
+      const trialId = document.getElementById('trialSelect').value;
+      if (trialId && e.target.value !== '') {{
+        const stepNum = parseInt(e.target.value);
+        const snapshot = snapshots.find(s => s.trial_id === trialId && s.step_number === stepNum);
+        if (snapshot) {{
+          const idx = snapshots.indexOf(snapshot);
+          loadSnapshot(idx);
+        }}
+      }}
+    }};
+
+    // Keyboard controls
+    document.addEventListener('keydown', (e) => {{
+      switch(e.key) {{
+        case 'ArrowLeft':
+          e.preventDefault();
+          loadSnapshot(currentIdx - 1);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          loadSnapshot(currentIdx + 1);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          // Previous trial
+          const currentTrial = snapshots[currentIdx]?.trial_id;
+          const trials = [...new Set(snapshots.map(s => s.trial_id))].sort();
+          const currentTrialIdx = trials.indexOf(currentTrial);
+          if (currentTrialIdx > 0) {{
+            const prevTrial = trials[currentTrialIdx - 1];
+            const firstStepOfPrevTrial = snapshots.find(s => s.trial_id === prevTrial);
+            if (firstStepOfPrevTrial) {{
+              loadSnapshot(snapshots.indexOf(firstStepOfPrevTrial));
+            }}
+          }}
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          // Next trial
+          const currentTrial2 = snapshots[currentIdx]?.trial_id;
+          const trials2 = [...new Set(snapshots.map(s => s.trial_id))].sort();
+          const currentTrialIdx2 = trials2.indexOf(currentTrial2);
+          if (currentTrialIdx2 < trials2.length - 1) {{
+            const nextTrial = trials2[currentTrialIdx2 + 1];
+            const firstStepOfNextTrial = snapshots.find(s => s.trial_id === nextTrial);
+            if (firstStepOfNextTrial) {{
+              loadSnapshot(snapshots.indexOf(firstStepOfNextTrial));
+            }}
+          }}
+          break;
+        case ' ':
+          e.preventDefault();
+          toggleAutoPlay();
+          break;
+      }}
+    }});
+
+    // Initialize
+    if (snapshots.length > 0) {{
+      loadSnapshot(0);
+    }} else {{
+      document.getElementById('title').textContent = 'No snapshots available';
+    }}
+  </script>
+</body>
+</html>
+"""
+        
+        # Write the file
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"Comprehensive visualization saved to: {filename}")
+        print(f"Total snapshots: {len(cls.global_trial_data)}")
+        print(f"Trials: {len(trials_data)}")
+        
+        return filename
         """
         Create an HTML file with all snapshots that allows switching between them.
         """
@@ -1028,15 +1511,16 @@ class MCTS:
             # Display the tree
             self.tree_visualization(root, snapshot_name)
             
-            # Prompt user for action probability output
-            try:
-                response = input("Output action prob? (y/n): ").strip().lower()
-                if response == 'y':
-                    print("Action probabilities:")
-                    print(action_probs)
-            except (EOFError, KeyboardInterrupt):
-                # Handle cases where input is not available (e.g., in automated runs)
-                pass
+            # Prompt user for action probability output (only if pause_at_each_step is enabled)
+            if self.args.get('pause_at_each_step', True):
+                try:
+                    response = input("Output action prob? (y/n): ").strip().lower()
+                    if response == 'y':
+                        print("Action probabilities:")
+                        print(action_probs)
+                except (EOFError, KeyboardInterrupt):
+                    # Handle cases where input is not available (e.g., in automated runs)
+                    pass
         
         return action_probs
             
@@ -1607,6 +2091,11 @@ def evaluate(args):
     
     # Initialize MCTS or MCGS
     mcts = mcts_cls(n3il, args=args)
+    
+    # Set trial ID for tree visualization
+    if args.get('tree_visualization', False):
+        trial_id = f"trial_{args.get('random_seed', 'unknown')}_n{args.get('n', 'unknown')}"
+        mcts.trial_id = trial_id
 
     state = n3il.get_initial_state()
     num_of_points = 0
@@ -1638,36 +2127,10 @@ def evaluate(args):
             
             # Save tree visualization snapshots if enabled
             if args.get('tree_visualization', False) and hasattr(mcts, 'snapshots') and mcts.snapshots:
-                # Create filenames with timestamp and configuration info
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                
-                # Determine the web visualization directory
-                # If figure_dir is specified, create web_visualization folder within its parent directory
-                if 'figure_dir' in args:
-                    # Get the parent directory of figure_dir (should be the test script directory)
-                    script_dir = os.path.dirname(args['figure_dir'])
-                    web_viz_dir = os.path.join(script_dir, 'web_visualization')
-                else:
-                    # Fallback to current directory with web_visualization subfolder
-                    web_viz_dir = './web_visualization'
-                
-                # Create the web visualization directory
-                os.makedirs(web_viz_dir, exist_ok=True)
-                
-                # Save multi-snapshot HTML
-                multi_filename = os.path.join(web_viz_dir, f"mcts_tree_multi_n{args['n']}_points{num_of_points}_{timestamp}.html")
-                mcts.save_multi_snapshot_html(multi_filename)
-                
-                # Also save individual snapshots for full functionality
-                for i, snapshot in enumerate(mcts.snapshots):
-                    individual_filename = os.path.join(web_viz_dir, f"mcts_tree_step{i}_n{args['n']}_{timestamp}.html")
-                    try:
-                        snapshot['network'].save_graph(individual_filename)
-                        print(f"Individual snapshot {i+1} saved as: {individual_filename}")
-                    except Exception as e:
-                        print(f"Warning: Could not save individual snapshot {i+1}: {e}")
-                
-                print(f"Tree visualization files saved to: {web_viz_dir}")
+                print(f"Collected {len(mcts.snapshots)} tree snapshots for this trial")
+                print(f"Total global snapshots so far: {len(MCTS.global_trial_data)}")
+                # Individual HTML files are no longer generated per trial
+                # All data is aggregated globally for comprehensive viewing
                 
             break
 
