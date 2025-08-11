@@ -9,10 +9,10 @@ from src.algos.mcts import evaluate, MCTS
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run MCTS tests for a range of n values.")
-    parser.add_argument("--start", type=int, default=3, help="Starting value of n (inclusive)")
-    parser.add_argument("--end", type=int, default=4, help="Ending value of n (exclusive)")
-    parser.add_argument("--step", type=int, default=1, help="Step size for n values")
-    parser.add_argument("--repeat", type=int, default=2, help="Number of runs for each n value")
+    parser.add_argument("--start", type=int, default=4, help="Starting value of n (inclusive)")
+    parser.add_argument("--end", type=int, default=100, help="Ending value of n (exclusive)")
+    parser.add_argument("--step", type=int, default=100, help="Step size for n values")
+    parser.add_argument("--repeat", type=int, default=10, help="Number of runs for each n value")
     args_cli = parser.parse_args()
 
     # Generate list of n values
@@ -37,7 +37,7 @@ if __name__ == "__main__":
                 'max_level_to_use_symmetry': -1,  # Use symmetry for first 2 levels (helps find compact solutions)
                 'n': n,
                 'C': 1.41,  # 1e-7 for n=20
-                'num_searches': 50,  # Reduced for testing tree visualization
+                'num_searches': 100*(n**2),  # Reduced for testing tree visualization
                 'num_workers': 1,      # >1 ⇒ parallel
                 'virtual_loss': 1.0,     # magnitude to subtract at reservation
                 'process_bar': True,

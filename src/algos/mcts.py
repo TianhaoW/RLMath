@@ -737,6 +737,10 @@ class MCTS:
             
             # Prepare JSON data for this node - split label into lines for proper display
             label_lines = label.split('\n')
+            # Create title with proper newline escaping
+            escaped_label = label.replace('\n', '\\n')
+            title_text = f"Action: {node.action_taken}\\n{escaped_label}\\nChildren: {len(node.children)}\\nValid moves left: {np.sum(node.valid_moves)}"
+            
             json_nodes.append({
                 "id": current_id,
                 "label": label_lines,  # Use array of lines instead of single string
@@ -745,7 +749,7 @@ class MCTS:
                 "size": 30,
                 "level": level,
                 "color": color,
-                "title": f"Action: {node.action_taken}\\n{label.replace(chr(10), '\\n')}\\nChildren: {len(node.children)}\\nValid moves left: {np.sum(node.valid_moves)}",
+                "title": title_text,
                 "x": i * 100,  # Simple layout
                 "y": level * 150
             })
