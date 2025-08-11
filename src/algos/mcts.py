@@ -120,52 +120,70 @@ def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     
     # === OPTIMAL FOR 3x3 MINIMAL COMPLETE SET (4 points) ===
     # Simple linear inverse works best for finding exact minimal sets
-    return (1.6*n - total) / 0.3 * n  # Range: [0, 1], 1.0 for empty, 0.0 for full
-    # return max(0, (2.0 * n - total) / n)  # Aggressive: reward up to 200% of n
-    # return ((1.6*n - total)**10) / ((0.3 * n)**10)  # Range: [0, 1], 1.0 for empty, 0.0 for full
-    
-    # 7. Inverse with offset (avoid division by zero issues)
-    # return 1.0 / (1.0 + total / n)  # Range: [0.5, 1]
-    # return 2.0 / (2.0 + total / n)  # Range: [0.67, 1]
-    
-    # 8. Piecewise Linear (Different slopes in different regions)
-    # if total <= n * 0.5:
-    #     return 1.0 - 0.2 * (total / (n * 0.5))  # Gentle penalty for first half
-    # else:
-    #     return 0.8 - 0.8 * ((total - n * 0.5) / (n * 0.5))  # Steep penalty after
-    
-    # 9. Trigonometric (Smooth curves)
-    # return np.cos(np.pi * total / (2.0 * n))  # Cosine curve: [0, 1]
-    # return (1.0 + np.cos(np.pi * total / n)) / 2.0  # Shifted cosine: [0, 1]
-    
-    # 10. Hyperbolic (Sharp drop-off)
-    # return 1.0 / (1.0 + (total / n) ** 2)  # Range: [0.5, 1]
-    # return 2.0 / (2.0 + (total / n) ** 2)  # Range: [0.67, 1]
-    
-    # 11. Exponential with different bases
-    # return 0.5 ** (total / n)  # Base 0.5: [0.5^1, 1] ≈ [0.5, 1]
-    # return 0.1 ** (total / n)  # Base 0.1: [0.1^1, 1] ≈ [0.1, 1]
-    
-    # 12. Multi-threshold rewards (step function)
-    # if total <= n * 0.25: return 1.0      # Excellent
-    # elif total <= n * 0.5: return 0.8     # Good
-    # elif total <= n * 0.75: return 0.5    # OK
-    # else: return 0.1                      # Poor
-    
-    # 13. Gaussian-like (bell curve centered at 0)
-    # return np.exp(-0.5 * (total / (n * 0.3)) ** 2)  # Range: [exp(-∞), 1]
-    
-    # 14. Rational functions
-    # return (n - total) / (n + total)  # Range: [-1, 1], but clipped to [0, 1]
-    # return max(0, (n - total) / (n + total))
-    
-    # 15. Custom hybrid (combine multiple preferences)
-    # linear_part = (n - total) / n
-    # exp_part = np.exp(-total / n)
-    # return 0.7 * linear_part + 0.3 * exp_part  # Weighted combination
+    return (1.6*n - total) * n / (1.6 - 1.3) # Range: [0, 1], 1.0 for empty, 0.0 for full !!!CURRENT OPTIMAL!!!
 
-    # =============Positive rewards for larger set sizes=============
-    # return (total - 1.5*n) / 0.5*n  # Normalized value function, range [0, 1]
+    # Baseline rewarding function
+    '''
+    baseline = 1.6 * n
+    theoretical_min = 1.3 * n
+    num = baseline - total
+    if num > 0:
+        return num / (baseline - theoretical_min)  # Range: [0, 1], 1.0 for empty, 0.0 for full
+    if num <= 0:
+        return num / (baseline - theoretical_min)  # Range: [-1, 0], 0.0 for empty, -1.0 for full
+    '''
+    # Numba-safe scalar casts
+    total = np.float64(np.sum(state))
+    n = np.float64(pts_upper_bound) / 2.0
+
+    # Target and normalization
+    target = 0.9 * n
+    max_possible = 2.0 * n
+    eps = np.float64(1e-12)
+    span = np.maximum(max_possible - target, eps)  # avoid division by zero
+    # Normalized distance: 0 at target, 1 at 2n (can be < 0 if total < target)
+    tnorm = (total - target) / span
+
+    # ---- Choose ONE of the following returns (uncomment exactly one) ----
+
+    # 2) Quadratic (penalizes farther from target more strongly)
+    # return np.clip(1.0 - tnorm * tnorm, 0.0, 1.0)
+
+    # 3) Gaussian peak at target (default active; sharp pull to 0.9n)
+    # sigma = np.maximum(0.05 * n, eps)  # controls sharpness
+    # return np.exp(-0.5 * ((total - target) / sigma) ** 2)
+
+    # 4) Logistic decay from target upward
+    # k = 6.0 / np.maximum(n, 1.0)
+    # return 1.0 / (1.0 + np.exp(k * (total - target)))
+
+    # 5) Rational distance penalty (gentler tail)
+    # alpha = 2.0 / np.maximum(n, 1.0)
+    # return 1.0 / (1.0 + alpha * np.abs(total - target))
+
+    # 6) Piecewise: full at/below target, then linear drop to 0 at 2n
+    # if total <= target:
+    #     return 1.0
+    # else:
+    #     return np.maximum(0.0, 1.0 - (total - target) / span)
+
+    # 7) Cosine half-wave on [target, 2n] (smooth with zero slope at target)
+    # x = np.clip(tnorm, 0.0, 1.0)               # map [target,2n] -> [0,1]
+    # return 0.5 * (1.0 + np.cos(np.pi * x))     # 1 at target, 0 at 2n
+
+    # ------------ Positive-direction variants (optimum at 2n) ------------
+    # Use these if you want to test the opposite objective (larger total better).
+    # 1+) Linear increasing from target to 2n
+    # return np.clip(tnorm, 0.0, 1.0)
+
+    # 2+) Quadratic increasing (slow start, faster near 2n)
+    # x = np.clip(tnorm, 0.0, 1.0)
+    # return x * x
+
+    # 3+) Exponential rise (very low until near 2n)
+    # x = np.clip(tnorm, 0.0, 1.0)
+    # k = 4.0
+    # return (np.exp(k * x) - 1.0) / (np.exp(k) - 1.0)
 
 # JIT-compiled function to check if three points are collinear
 @njit(cache=True, nogil=True)
