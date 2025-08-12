@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, default=3, help="Starting value of n (inclusive)")
     parser.add_argument("--end", type=int, default=100, help="Ending value of n (exclusive)")
     parser.add_argument("--step", type=int, default=100, help="Step size for n values")
-    parser.add_argument("--repeat", type=int, default=10, help="Number of runs for each n value")
+    parser.add_argument("--repeat", type=int, default=1, help="Number of runs for each n value")
     args_cli = parser.parse_args()
 
     # Generate list of n values
