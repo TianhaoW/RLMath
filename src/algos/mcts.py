@@ -102,7 +102,7 @@ def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     # return (1.2*n - total) / n  # Range: [0, 1]
     
     # 2. Exponential Decay (Strong preference for fewer points)
-    return np.exp(2.0 * ((total-n) / n))  # Range: [e^-2, 1] ≈ [0.135, 1]
+    return np.exp(-2.0 * ((total-n) / n))  # Range: [e^-2, 1] ≈ [0.135, 1]
     # return np.exp(-1.0 * (total / n))  # Range: [e^-1, 1] ≈ [0.368, 1]
     # return np.exp(-0.5 * (total / n))  # Range: [e^-0.5, 1] ≈ [0.607, 1]
     
