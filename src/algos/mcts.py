@@ -48,7 +48,7 @@ def exploration_decay_nb(x):  # Monotone-down from (0,1) to (1,0)
     # return 1 - 1 * np.sqrt(x) # 83/100 times (83.0%)
     # return 1 - 0.5 * np.sqrt(x) # 88/100 times (88.0%)
     # return 1 - 0.7 * np.sqrt(x) # 86%
-    #return 1 - 0.8 * np.sqrt(x) # 92/100 times (92.0%)
+    # return 1 - 0.8 * np.sqrt(x) # 92/100 times (92.0%)
     return 1 - 0.85 * np.sqrt(x)
 
     # Quadratic (faster decay)
@@ -89,6 +89,8 @@ def value_fn_nb(x):
     # return np.exp(x)
     return x
 
+
+## Remember Also Adjust get_value_nb in collinear_for_mcts.py !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 @njit(cache=True, nogil=True)
 def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     total = np.sum(state)
@@ -97,10 +99,10 @@ def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     # === REVERSE REWARDING FUNCTIONS (prefer smaller point counts) ===
     
     # 1. Simple Linear Inverse: 1.0 for empty board, 0.0 for full board
-    # return (n - total) / n  # Range: [0, 1]
+    # return (1.2*n - total) / n  # Range: [0, 1]
     
     # 2. Exponential Decay (Strong preference for fewer points)
-    # return np.exp(-2.0 * (total / n))  # Range: [e^-2, 1] ≈ [0.135, 1]
+    return np.exp(2.0 * ((total-n) / n))  # Range: [e^-2, 1] ≈ [0.135, 1]
     # return np.exp(-1.0 * (total / n))  # Range: [e^-1, 1] ≈ [0.368, 1]
     # return np.exp(-0.5 * (total / n))  # Range: [e^-0.5, 1] ≈ [0.607, 1]
     
@@ -123,7 +125,7 @@ def get_value_nb(state, pts_upper_bound, value_f=value_fn_nb):
     
     # === OPTIMAL FOR 3x3 MINIMAL COMPLETE SET (4 points) ===
     # Simple linear inverse works best for finding exact minimal sets
-    return (1.6*n - total) * n  / (1.6 - 1.3)# Range: [0, 1], 1.0 for empty, 0.0 for full !!!CURRENT OPTIMAL!!!
+    # return (1.6*n - total) * n  / (1.6 - 1.3) # Range: [0, 1], 1.0 for empty, 0.0 for full !!!CURRENT OPTIMAL!!!
 
     # Baseline rewarding function
     '''
@@ -1485,7 +1487,7 @@ class MCTS:
             node = root
 
             # selection
-            while node.is_fully_expanded():
+            while node.is_fully_expanded(): #         return self.is_full and len(self.children) > 0
                 node = node.select(iter=search)
 
             if node.action_taken is not None:

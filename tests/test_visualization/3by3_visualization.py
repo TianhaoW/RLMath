@@ -9,7 +9,7 @@ from src.algos.mcts import evaluate, MCTS
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run MCTS tests for a range of n values.")
-    parser.add_argument("--start", type=int, default=3, help="Starting value of n (inclusive)")
+    parser.add_argument("--start", type=int, default=20, help="Starting value of n (inclusive)")
     parser.add_argument("--end", type=int, default=100, help="Ending value of n (exclusive)")
     parser.add_argument("--step", type=int, default=100, help="Step size for n values")
     parser.add_argument("--repeat", type=int, default=1, help="Number of runs for each n value")
@@ -37,18 +37,18 @@ if __name__ == "__main__":
                 'max_level_to_use_symmetry': -1,  # Use symmetry for first 2 levels (helps find compact solutions)
                 'n': n,
                 'C': 1.41,  # 1e-7 for n=20
-                'num_searches': 100*(n**2),  # Reduced for testing tree visualization
+                'num_searches': 10*(n**2),  # Reduced for testing tree visualization
                 'num_workers': 1,      # >1 ⇒ parallel
                 'virtual_loss': 1.0,     # magnitude to subtract at reservation
-                'process_bar': True,
-                'display_state': True,
+                'process_bar': False,
+                'display_state': False,
                 'logging_mode': True,  # Enable logging mode to get return value
                 'TopN': n,  # Without Priority
                 "simulate_with_priority": False,
                 'table_dir': os.path.dirname(__file__),  # Directory to save tables
                 'figure_dir': os.path.join(os.path.dirname(__file__), 'figure'),  # Directory to save figures
                 'random_seed': i,  # Use the loop index as a seed for reproducibility
-                'tree_visualization': True,  # Enable tree visualization
+                'tree_visualization': False,  # Enable tree visualization
                 'pause_at_each_step': False,  # Disable interactive prompts for automation
             }
             
