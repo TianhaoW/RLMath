@@ -602,7 +602,7 @@ def get_valid_moves_subset_nb(parent_state, parent_valid_moves, action_taken, ro
     Returns a flattened uint8 array: 1 = valid, 0 = invalid.
     """
     # Copy input mask and remove the taken action
-    mask = parent_valid_moves.copy()
+    mask = parent_valid_moves.copy().reshape(-1)
     mask[action_taken] = 0
 
     # Coordinates of the newly placed point
