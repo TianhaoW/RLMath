@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=mcts_smallest_complete_test     ## job name
+#SBATCH --job-name=mcts_largest_complete_test     ## job name
 #SBATCH -A NCKAPLAN_LAB     ## Class account to charge resources
 #SBATCH -p standard                ## partition name
 #SBATCH --nodes=1             ## (-N) number of nodes the job will use
