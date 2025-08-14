@@ -498,20 +498,28 @@ class Node:
             self.level = np.sum(state)  # Level is the number of points placed
             if (self.level <= game.max_level_to_use_symmetry and 
                 hasattr(game, 'get_valid_moves_with_symmetry')):
-                self.valid_moves = game.get_valid_moves_with_symmetry(state)
+                self.action_space = game.get_valid_moves(state)
+                self.valid_moves = game.filter_valid_moves_by_symmetry(
+                    self.action_space, state
+                ).copy()
             else:
                 self.valid_moves = game.get_valid_moves(state)
+                self.action_space = self.valid_moves.copy()
         else:
             self.level = parent.level + 1
             if (self.level <= game.max_level_to_use_symmetry and 
                 hasattr(game, 'get_valid_moves_subset_with_symmetry')):
-                self.valid_moves = game.get_valid_moves_subset_with_symmetry(
+                self.action_space = game.get_valid_moves_subset(
                     parent.state, parent.action_space, self.action_taken)
+                self.valid_moves = game.filter_valid_moves_by_symmetry(
+                    self.action_space, state
+                ).copy()
             else:
                 self.valid_moves = game.get_valid_moves_subset(
                     parent.state, parent.action_space, self.action_taken)
-
-        self.action_space = self.valid_moves.copy()
+                self.action_space = self.valid_moves.copy()
+        
+        # Ensure action_space is immutable
         self.action_space.flags.writeable = False
 
         self.is_full = False
