@@ -11,3 +11,4 @@ priority_grids/
 **/figure/
 **/figures/
 **/web_visualization/
+tests/test_mcts_largest_complete_v2/data_analysis.ipynb
