@@ -1538,14 +1538,24 @@ class N3il_with_symmetry(N3il):
 
     def get_valid_moves_with_symmetry(self, state):
         # Parent valid moves (already possibly TopN-prioritized)
-        valid_moves = super().get_valid_moves(state)
+        action_sapce = super().get_valid_moves(state)
 
+        return action_sapce, filter_actions_by_stabilizer_nb(
+            action_sapce, state, self.row_count, self.column_count
+        )
+    
+    def filter_valid_moves_by_symmetry(self, valid_moves, state):
+        """
+        Filter the given valid moves by the stabilizer subgroup of the current state.
+        This is a convenience method to apply symmetry filtering without needing to
+        recompute the state.
+        """
         return filter_actions_by_stabilizer_nb(
             valid_moves, state, self.row_count, self.column_count
         )
 
-    def get_valid_moves_subset_with_symmetry(self, parent_state, parent_valid_moves, action_taken):
-        valid_moves = super().get_valid_moves_subset(parent_state, parent_valid_moves, action_taken)
+    def get_valid_moves_subset_with_symmetry(self, parent_state, parent_action_space, action_taken):
+        action_space = super().get_valid_moves_subset(parent_state, parent_action_space, action_taken)
 
         # Build child state to compute stabilizer at the node where these moves apply
         child_state = parent_state.copy()
@@ -1553,6 +1563,6 @@ class N3il_with_symmetry(N3il):
         c = action_taken % self.column_count
         child_state[r, c] = 1
 
-        return filter_actions_by_stabilizer_nb(
-            valid_moves, child_state, self.row_count, self.column_count
+        return action_space, filter_actions_by_stabilizer_nb(
+            action_space, child_state, self.row_count, self.column_count
         )
