@@ -39,6 +39,9 @@ def set_seeds(seed):
 
 @njit(cache=True, nogil=True)
 def exploration_decay_nb(x):  # Monotone-down from (0,1) to (1,0)
+    # Cosine decay
+    # return (np.cos(np.pi * x)+1)/2  # 100% exploration at start, 0% at end
+    
     # Linear
     # return 1 - 0.7 * x   # Found optimal 4-point solution: 86/100 times (86.0%)
     # return 1 - x # 85/100 times (85.0%)
