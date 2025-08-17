@@ -1,15 +1,23 @@
-name: mcgs-env
+name: poetry-env
 channels:
-  - defaults
   - conda-forge
+  - defaults
 dependencies:
   - python=3.11
-  - numpy
-  - tqdm
-  - numba
-  - matplotlib
-  - psutil
-  - sympy
   - pip
+  # scientific stack via conda (avoid duplicating in pip)
+  - numpy=2.3
+  - scipy=1.16
+  - numba=0.61
+  - pandas=2.3
+  - matplotlib
+  # dev / tools
+  - jupyterlab
+  - poetry
   - pip:
-      - pprintpp  # pprint is built-in, but pprintpp is a pip package if you want enhanced pretty-printing
+      - torch==2.7.1
+      - gymnasium==1.1.1
+      - stable-baselines3==2.6.0
+      - pyvis==0.3.2
+      - openai==1.86.0
+      - tqdm==4.67.1
