@@ -6,10 +6,10 @@ dependencies:
   - python=3.11
   - pip
   # scientific stack via conda (avoid duplicating in pip)
-  - numpy=2.3
+  - numpy
   - scipy=1.16
   - numba=0.61
-  - pandas=2.3
+  - pandas
   - matplotlib
   # dev / tools
   - jupyterlab
