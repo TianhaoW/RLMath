@@ -483,6 +483,7 @@ def simulate_with_priority_nb(state, row_count, column_count, pts_upper_bound, p
 
     return get_value_nb(state, pts_upper_bound)
 
+
 class Node:
     def __init__(self, game, args, state, parent=None, action_taken=None):
         self.game = game
@@ -608,6 +609,235 @@ class Node:
         with self.lock:
             self.value_sum += value
             self._ucb_dirty = True  # Mark UCB as outdated
+        self.visit_count += 1
+        if self.parent is not None:
+            self.parent.backpropagate(value)
+
+# ========= Bit-pack utilities =========
+def _pack_bits_bool2d(arr2d: np.ndarray) -> np.ndarray:
+    """
+    Pack a 2D 0/1 or bool array into a 1D uint8 bit vector using bitorder='big'.
+    """
+    # Ensure uint8 0/1
+    a = arr2d.astype(np.uint8, copy=False)
+    return np.packbits(a.reshape(-1), bitorder='big')
+
+def _unpack_bits_to_2d(bits: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    """
+    Unpack a 1D uint8 bit vector to a 2D uint8 array (0/1) with given shape.
+    """
+    flat = np.unpackbits(bits, bitorder='big')
+    need = rows * cols
+    if flat.size > need:
+        flat = flat[:need]
+    return flat.reshape((rows, cols)).astype(np.uint8, copy=False)
+
+def _bit_clear_inplace(bits: np.ndarray, idx: int) -> None:
+    """
+    Clear (set to 0) the bit at flat index idx in the packed array (bitorder='big').
+    Uses a non-negative mask to avoid OverflowError from bitwise NOT on Python ints.
+    """
+    byte_i = idx // 8
+    off    = idx % 8
+    # Build a clear mask: 0xFF with target bit cleared
+    clear_mask = np.uint8(0xFF ^ (1 << (7 - off)))
+    bits[byte_i] &= clear_mask
+
+def _bit_set_inplace(bits: np.ndarray, idx: int) -> None:
+    """
+    Set (to 1) the bit at flat index idx in the packed array (bitorder='big').
+    """
+    byte_i = idx // 8
+    off    = idx % 8
+    bits[byte_i] |= np.uint8(1 << (7 - off))
+
+
+class Node_Compressed:
+    """
+    Drop-in compatible Node that implements Scheme B:
+    - Store state / valid_moves / action_space as bit-packed arrays (1 bit per cell).
+    - Provide properties .state, .valid_moves, .action_space to return unpacked views (uint8 0/1).
+    - Internal methods operate on packed bits to reduce memory and allocations.
+    Notes:
+      * Compatibility: external code that reads node.state / node.valid_moves continues to work.
+      * External code that mutates node.valid_moves should not be relied upon (same as original),
+        but we return an array copy for safety.
+    """
+    # Keep the same public attributes (exposed via properties where needed)
+    __slots__ = (
+        'game','args','parent','action_taken',
+        'children','visit_count','value_sum','lock','_vl',
+        'level','is_full','_cached_ucb','_ucb_dirty',
+        # packed payloads
+        '_rows','_cols','_state_bits','_valid_bits','_action_bits'
+    )
+
+    def __init__(self, game, args, state, parent=None, action_taken=None):
+        self.game = game
+        self.args = args
+        self.parent = parent
+        self.action_taken = action_taken
+
+        self.children = []
+        self.visit_count = 0
+        self.value_sum = 0.0
+        self.lock = threading.Lock()
+        self._vl = args.get('virtual_loss', 1.0)
+
+        # grid shape
+        self._rows = getattr(game, 'row_count', state.shape[0])
+        self._cols = getattr(game, 'column_count', state.shape[1] if state.ndim > 1 else self._rows)
+
+        # --- pack state ---
+        # Expect state as 2D 0/1 (uint8 or bool)
+        self._state_bits = _pack_bits_bool2d(state)
+
+        # --- compute valid/action masks using the same game API as original ---
+        if parent is None:
+            # level = number of points placed
+            self.level = int(np.sum(state))
+            if (self.level <= game.max_level_to_use_symmetry and 
+                hasattr(game, 'get_valid_moves_with_symmetry')):
+                action_space = game.get_valid_moves(state)
+                valid_moves  = game.filter_valid_moves_by_symmetry(action_space, state).copy()
+            else:
+                valid_moves  = game.get_valid_moves(state)
+                action_space = valid_moves.copy()
+        else:
+            self.level = parent.level + 1
+            # For subset calls, pass parent's action_space (unpacked) and parent.state (unpacked)
+            parent_state = parent.state
+            parent_action_space = parent.action_space
+            if (self.level <= game.max_level_to_use_symmetry and 
+                hasattr(game, 'get_valid_moves_subset_with_symmetry')):
+                action_space = game.get_valid_moves_subset(parent_state, parent_action_space, self.action_taken)
+                valid_moves  = game.filter_valid_moves_by_symmetry(action_space, self.state,).copy()  # self.state property unpacks
+            else:
+                valid_moves  = game.get_valid_moves_subset(parent_state, parent_action_space, self.action_taken)
+                action_space = valid_moves.copy()
+
+        # --- pack masks & discard large arrays ---
+        self._valid_bits  = _pack_bits_bool2d(valid_moves.reshape(self._rows, self._cols))
+        self._action_bits = _pack_bits_bool2d(action_space.reshape(self._rows, self._cols))
+
+        self.is_full = False
+        self._cached_ucb = None
+        self._ucb_dirty = True
+
+    # ---------- compatibility properties ----------
+    @property
+    def state(self) -> np.ndarray:
+        # Return a fresh 2D uint8 (0/1) array
+        return _unpack_bits_to_2d(self._state_bits, self._rows, self._cols)
+
+    @property
+    def valid_moves(self) -> np.ndarray:
+        # Return a fresh 1D uint8 (0/1) vector, write-protected to mimic immutability contract
+        vm = _unpack_bits_to_2d(self._valid_bits, self._rows, self._cols).reshape(-1)
+        vm.flags.writeable = False
+        return vm
+
+    @property
+    def action_space(self) -> np.ndarray:
+        am = _unpack_bits_to_2d(self._action_bits, self._rows, self._cols).reshape(-1)
+        am.flags.writeable = False
+        return am
+
+    # ---------- drop-in methods (logic aligned with original) ----------
+    def apply_virtual_loss(self):
+        with self.lock:
+            self.value_sum -= self._vl
+            self.visit_count += 1
+            self._ucb_dirty = True
+
+    def revert_virtual_loss(self):
+        with self.lock:
+            self.value_sum += self._vl
+            self._ucb_dirty = True
+
+    def is_fully_expanded(self):
+        return self.is_full and len(self.children) > 0
+
+    def select(self, iter):
+        best_child = None
+        best_ucb = -np.inf
+        # avoid log(0)
+        log_N = math.log(self.visit_count) if self.visit_count > 0 else 0.0
+
+        for child in self.children:
+            ucb = self.get_ucb(child, iter, log_N)
+            if ucb > best_ucb:
+                best_child = child
+                best_ucb = ucb
+
+        return best_child
+
+    def get_ucb(self, child, iter, log_N=None):
+        if log_N is None:
+            log_N = math.log(self.visit_count) if self.visit_count > 0 else 0.0
+
+        with child.lock:
+            if not child._ucb_dirty and child._cached_ucb is not None:
+                return child._cached_ucb
+
+            q_value = child.value_sum / max(1, child.visit_count)
+            T_i = self.args['C'] * exploration_decay_nb(iter/self.args['num_searches'])
+            exploration_value = T_i * math.sqrt(max(1e-12, log_N) / max(1, child.visit_count))
+            ucb = q_value + exploration_value
+            child._cached_ucb = ucb
+            child._ucb_dirty = False
+            return ucb
+
+    def _valid_sum(self) -> int:
+        # Fast count of set bits
+        flat = np.unpackbits(self._valid_bits, bitorder='big')
+        return int(flat[: self._rows * self._cols].sum())
+
+    def expand(self):
+        # Choose a random valid action; work on packed bits to avoid storing big arrays
+        flat_valid = np.unpackbits(self._valid_bits, bitorder='big')[: self._rows * self._cols]
+        valid_indices = np.flatnonzero(flat_valid)
+        if valid_indices.size == 0:
+            self.is_full = True
+            return None
+
+        action = int(np.random.choice(valid_indices))
+        # consume this action (clear its bit)
+        _bit_clear_inplace(self._valid_bits, action)
+
+        # mark is_full if no moves remain
+        if flat_valid.sum() - 1 == 0:
+            self.is_full = True
+
+        # Build child state as in original (copy, then get_next_state)
+        child_state = self.state.copy()  # property: unpack current state
+        child_state = self.game.get_next_state(child_state, action)
+
+        # Create child node (compressed)
+        child = Node_Compressed(self.game, self.args, child_state, self, action)
+        self.children.append(child)
+        return child
+
+    def simulate(self):
+        # Unpack to 2D array; simulation mutates a copy
+        tmp = self.state.copy()
+        if self.args.get("simulate_with_priority", False):
+            return simulate_with_priority_nb(tmp,
+                                            self.game.row_count,
+                                            self.game.column_count,
+                                            self.game.pts_upper_bound,
+                                            self.game.priority_grid,
+                                            self.args['TopN'])
+        else:
+            return simulate_nb(tmp,
+                            self.game.row_count,
+                            self.game.column_count,
+                            self.game.pts_upper_bound)
+
+    def backpropagate(self, value):
+        with self.lock:
+            self.value_sum += value
+            self._ucb_dirty = True
         self.visit_count += 1
         if self.parent is not None:
             self.parent.backpropagate(value)
@@ -1487,7 +1717,11 @@ class MCTS:
 
     def search(self, state):
         # define root
-        root = Node(self.game, self.args, state)
+        if self.args.get('node_compression', False):
+            root = Node_Compressed(self.game, self.args, state)
+            print("Using Node_Compressed for MCTS")
+        else:
+            root = Node(self.game, self.args, state)
 
         if self.args['process_bar'] == True:
             search_iterator = trange(self.args['num_searches'])
