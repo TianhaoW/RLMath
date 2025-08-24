@@ -16,3 +16,4 @@ tests/test_mcts_largest_complete_v2/data_analysis.ipynb
 .vscode/settings.json
 tests/test_node_compress/node_compress.ipynb
 vscode-sshd-41521893.out
+.DS_Store
