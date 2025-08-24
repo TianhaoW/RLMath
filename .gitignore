@@ -17,3 +17,4 @@ tests/test_mcts_largest_complete_v2/data_analysis.ipynb
 tests/test_node_compress/node_compress.ipynb
 vscode-sshd-41521893.out
 .DS_Store
+tests/test_mcts_smallest_complete_v2/data_analysis.ipynb
