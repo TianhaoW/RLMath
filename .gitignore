@@ -19,3 +19,4 @@ vscode-sshd-41521893.out
 .DS_Store
 tests/test_mcts_smallest_complete_v2/data_analysis.ipynb
 tests/test_mcts_smallest_complete_v2/smallest_complete_v2.py
+tests/test_Alpha_Zero/07_2_N3IL_AlphaTweaks.ipynb
