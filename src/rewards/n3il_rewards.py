@@ -1,9 +1,21 @@
 from numba import njit
 import numpy as np
+from numpy.typing import NDArray
 
 ## Remember Also Adjust get_value_nb in collinear_for_mcts.py !!!!!!!!!!!!!!!!!!!!!!!!!!!!
 @njit(cache=True, nogil=True)
-def get_value_nb(state, pts_upper_bound):
+def get_value_exp_norm_nb(state: NDArray, pts_upper_bound: int, coeff: float = 2.0):
+    total = np.sum(state)
+    n = pts_upper_bound/2
+    
+    # 2. Exponential Growth/Decay (Strong preference for fewer points)
+    return np.exp(coeff * ((total-n) / n))  # Range: [e^-2, 1] ≈ [0.135, 1]
+
+
+## Default rewarding function
+## Remember Also Adjust get_value_nb in collinear_for_mcts.py !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+@njit(cache=True, nogil=True)
+def get_value_nb(state: NDArray, pts_upper_bound: int):
     total = np.sum(state)
     n = pts_upper_bound/2
     

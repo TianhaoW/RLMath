@@ -1,7 +1,7 @@
 from numba import njit
 import numpy as np
 from .get_valid_moves import get_valid_moves_nb, get_valid_moves_subset_nb
-from .az_rewarding_func import get_value_nb
+from src.rewards.n3il_rewards import get_value_nb
 
 @njit(cache=True, nogil=True)
 def simulate_nb(state, row_count, column_count, pts_upper_bound):
