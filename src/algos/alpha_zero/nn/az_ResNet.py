@@ -3,32 +3,36 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-print("Torch version:", torch.__version__)
-print("CUDA available:", torch.cuda.is_available())  # Usually False on Apple Silicon
+def device_selector():
 
-# Metal (MPS) backend (Apple GPU)
-mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-mps_built = hasattr(torch.backends, "mps") and torch.backends.mps.is_built()
+    print("Torch version:", torch.__version__)
+    print("CUDA available:", torch.cuda.is_available())  # Usually False on Apple Silicon
 
-print("MPS built:", mps_built)
-print("MPS available:", mps_available)
+    # Metal (MPS) backend (Apple GPU)
+    mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    mps_built = hasattr(torch.backends, "mps") and torch.backends.mps.is_built()
 
-device = torch.device(
-    "mps" if mps_available else ("cuda" if torch.cuda.is_available() else "cpu")
-)
-print("Using device:", device)
+    print("MPS built:", mps_built)
+    print("MPS available:", mps_available)
 
-# Optional quick sanity test on selected device
-try:
-    x = torch.randn(2, 2, device=device)
-    print("Test tensor sum:", x.sum().item())
-except Exception as e:
-    print("Device test failed:", e)
+    device = torch.device(
+        "mps" if mps_available else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    print("Using device:", device)
 
-torch.manual_seed(0)
+    # Optional quick sanity test on selected device
+    try:
+        x = torch.randn(2, 2, device=device)
+        print("Test tensor sum:", x.sum().item())
+    except Exception as e:
+        print("Device test failed:", e)
+
+    torch.manual_seed(0)
+
+    return device
 
 class ResNet(nn.Module):
-    def __init__(self, game, num_resBlocks, num_hidden, device):
+    def __init__(self, game, num_resBlocks, num_hidden, device=device_selector()):
         super().__init__()
         self.device = device
         self.startBlock = nn.Sequential(

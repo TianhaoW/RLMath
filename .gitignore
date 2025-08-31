@@ -7,6 +7,7 @@ logs/
 /archive/
 */__pycache__/
 */*/__pycache__/
+__pycache__/
 priority_grids/
 **/figure/
 **/figures/
